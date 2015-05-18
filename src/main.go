@@ -1,11 +1,14 @@
 package xstream
 
-func InitHost
+import (
+	"net"
+	"net/rpc"
+)
 
 func Start(host Host) {
 	rpc.Register(&host)
 
-	listener, err := net.Listen("tcp", node.Id.Addr)
+	listener, err := net.Listen("tcp", host.HostInfo.Addr)
 	if err != nil {
 		log.Fatal("listen error: ", err)
 	}
@@ -17,4 +20,9 @@ func Start(host Host) {
 			go rpc.ServeConn(conn)
 		}
 	}
+}
+
+func main() {
+	//here we will init the Host with the SGengine
+	//and then start the Host
 }

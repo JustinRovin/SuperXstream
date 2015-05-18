@@ -27,7 +27,6 @@ type SlowStore stuct {
 	Chunks    EdgeList[]
 }
 
-
 type ScatterGatherEngine stuct {
 	FastStore  fs
 	SlowStore  ss 

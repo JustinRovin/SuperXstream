@@ -1,7 +1,5 @@
 package xstream
 
-scatterCount int
-
 type HostInfo struct {
 	Hostname string
 	Addr     string
@@ -9,9 +7,10 @@ type HostInfo struct {
 }
 
 type Host struct {
-	SGeng       ScatterGatherEngine
-	Info        HostInfo  
-	connections []*rpc.Client
+	SGeng        ScatterGatherEngine
+	Info         HostInfo  
+	connections  []*rpc.Client
+	scatterCount int
 }
 
 func CreateHost(sgeng ScatterGatherEngine, config *Config, myPort string) Host {
@@ -27,21 +26,27 @@ func CreateHost(sgeng ScatterGatherEngine, config *Config, myPort string) Host {
 }
 
 func (h *Host) AddEdges(edges *EdgeList, confim *bool) error {
-	// Validate bucket, key pair.
-	valid, key := validateKey(args.Bucket, args.Key)
-	if !valid {
-		return errors.New("invalid key :" + string(args.Key))
-	}
+	//this will append a chunk of edges to disk and update chunk indexs
 
-	// Find proper coordinator node.
-	position, id := t.PrefList.idForKey(key)
-	if id == t.Id {
-		t.coordGet(position, key, result)
-		return nil
-	} else {
-		return t.forwardGet(position, args, result)
-	}
 }
+
+func (h *Host) AddVerts(verts *VertList, confim *bool) error {
+	//this will append vertices to the InMem list of verts
+
+}
+
+func (h *Host) AppendUin(updates *UpdateList, confim *bool) error {
+	//this will append updates to the Update In Buffer
+
+}
+
+func (h *Host) IncScatterCount() {
+	//this function will increment the scatter count
+	//if scatter scount equals the total number of partitions/hosts
+	//Gather will be called on the local host
+
+}
+
 
 
 
