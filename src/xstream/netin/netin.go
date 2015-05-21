@@ -16,8 +16,8 @@ type Host struct {
 	scatterCount int
 }
 
-func (t *Host) UpdateChannel(vert int, something *int) error {
-	t.Channel <- vert
+func (t *Host) UpdateChannel(vert int, reply *int) error {
+	//t.Channel <- vert
 	fmt.Println("THIS SHIT GOT CALLED YO")
 	fmt.Println(vert)
 	return nil

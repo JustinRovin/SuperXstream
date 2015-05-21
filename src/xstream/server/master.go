@@ -26,22 +26,11 @@ func Start(host netin.Host) {
 	}
 }
 
-func Send(host netin.Host, destHost netin.Host) {
-	client, err := rpc.Dial("tcp", destHost.Info.Addr+":"+host.Info.Port)
-	if err != nil {
-		fmt.Println("dialing:", err)
-	}
-	var reply int
-
-	err = client.Call("Host.UpdateChannel", 5, &reply)
-}
-
 func main() {
 	//here we will init the Host with the SGengine
 	//and then start the Host
 
 	hostA := netin.CreateHost("A")
-	// hostB := netin.CreateHost("B")
 	fmt.Println("Starting rcp...")
 	Start(hostA)
 	fmt.Println("here")

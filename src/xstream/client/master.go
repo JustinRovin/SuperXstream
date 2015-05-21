@@ -28,16 +28,17 @@ func Start(host netin.Host) {
 
 func Send(host netin.Host, destHost netin.Host) {
 	client, err := rpc.Dial("tcp", destHost.Info.Addr+":"+host.Info.Port)
-	fmt.Println("BOUT TO SEND SOME SHTUFF")
+	fmt.Println("BOUT TO SEND SOME SHTUFF", err)
 	if err != nil {
 		fmt.Println("dialing:", err)
 	} else {
 		fmt.Println("not an err")
 	}
 	var reply int
+	sendThing := 5
 
-	err = client.Call("Host.UpdateChannel", 5, &reply)
-	fmt.Println("SEND SOME SHTUFF")
+	err = client.Call("Host.UpdateChannel", &sendThing, &reply)
+	fmt.Println("SEND SOME SHTUFF", err)
 }
 
 func main() {
