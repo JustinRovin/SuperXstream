@@ -20,10 +20,12 @@ type BFSEngine struct {
 	Channel        chan uint32
 	vertexStates   []vertex
 	vertexOffset   uint32
+	vertexMax      uint32
 }
 
 func (bfs *BFSEngine) Init() error {
 	bfs.vertexOffset = bfs.PartitionIndex * bfs.NumVertices
+	bfs.vertexMax = ((bfs.PartitionIndex + 1) * bfs.NumVertices) - 1
 
 	bfs.vertexStates = make([]vertex, bfs.NumVertices)
 	for i := uint32(0); i < bfs.NumVertices; i++ {
