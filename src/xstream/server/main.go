@@ -1,6 +1,7 @@
-package xstream
+package main
 
 import (
+	"../net/"
 	"net"
 	"net/rpc"
 )
@@ -25,4 +26,5 @@ func Start(host Host) {
 func main() {
 	//here we will init the Host with the SGengine
 	//and then start the Host
+
 }

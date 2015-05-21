@@ -1,5 +1,9 @@
 package xstream
 
+import (
+	"../sg"
+)
+
 type HostInfo struct {
 	Hostname string
 	Addr     string
@@ -8,7 +12,7 @@ type HostInfo struct {
 
 type Host struct {
 	SGeng        ScatterGatherEngine
-	Info         HostInfo  
+	Info         HostInfo
 	connections  []*rpc.Client
 	scatterCount int
 }
@@ -21,18 +25,8 @@ func CreateHost(sgeng ScatterGatherEngine, config *Config, myPort string) Host {
 	return Host{
 		SGeng:       sgeng,
 		Info:        inf,
-		connections: conns[:]
+		connections: conns[:],
 	}
-}
-
-func (h *Host) AddEdges(edges *EdgeList, confim *bool) error {
-	//this will append a chunk of edges to disk and update chunk indexs
-
-}
-
-func (h *Host) AddVerts(verts *VertList, confim *bool) error {
-	//this will append vertices to the InMem list of verts
-
 }
 
 func (h *Host) AppendUin(updates *UpdateList, confim *bool) error {
@@ -46,7 +40,3 @@ func (h *Host) IncScatterCount() {
 	//Gather will be called on the local host
 
 }
-
-
-
-
