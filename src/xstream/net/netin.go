@@ -9,29 +9,27 @@ type HostInfo struct {
 }
 
 type Host struct {
-	SGeng        ScatterGatherEngine
 	Info         HostInfo
 	connections  []*rpc.Client
 	scatterCount int
 }
 
-func CreateHost(sgeng ScatterGatherEngine, config *Config, myPort string) Host {
+func CreateHost(myPort string) Host {
 
-	var inf HostInfo
+	//var inf HostInfo
 	var conns [3]*rpc.Client
 
 	return Host{
-		SGeng:       sgeng,
-		Info:        inf,
 		connections: conns[:],
 	}
 }
 
+/*
 func (h *Host) AppendUin(updates *UpdateList, confim *bool) error {
 	//this will append updates to the Update In Buffer
 
 }
-
+*/
 func (h *Host) IncScatterCount() {
 	//this function will increment the scatter count
 	//if scatter scount equals the total number of partitions/hosts
