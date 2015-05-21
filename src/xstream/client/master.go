@@ -32,7 +32,7 @@ func Send(host netin.Host, destHost netin.Host) {
 	if err != nil {
 		fmt.Println("dialing:", err)
 	} else {
-		ftm.Println("not an err")
+		fmt.Println("not an err")
 	}
 	var reply int
 

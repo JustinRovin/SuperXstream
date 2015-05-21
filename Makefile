@@ -2,7 +2,7 @@ SHELL := /bin/sh
 
 .PHONY: all clean
 
-all: common server
+all: common server client
 
 server: common
 	go install xstream/server

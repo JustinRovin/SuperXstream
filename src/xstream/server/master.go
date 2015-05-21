@@ -41,7 +41,7 @@ func main() {
 	//and then start the Host
 
 	hostA := netin.CreateHost("A")
-	hostB := netin.CreateHost("B")
+	// hostB := netin.CreateHost("B")
 	fmt.Println("Starting rcp...")
 	Start(hostA)
 	fmt.Println("here")
