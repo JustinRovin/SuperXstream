@@ -1,8 +1,6 @@
 package xstream
 
-import (
-	"../sg"
-)
+import "net/rpc"
 
 type HostInfo struct {
 	Hostname string

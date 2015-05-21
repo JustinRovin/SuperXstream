@@ -1,7 +1,7 @@
 package main
 
 import (
-	"../net/"
+	"log"
 	"net"
 	"net/rpc"
 )
