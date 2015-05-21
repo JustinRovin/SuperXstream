@@ -1,4 +1,4 @@
-package xstream
+package netin
 
 //this master host should read in edges and verts
 //then send remote hosts their respective vertices and edges

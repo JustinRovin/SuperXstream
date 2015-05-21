@@ -8,8 +8,8 @@ server: common
 	go install xstream/server
 
 common:
-	go fmt xstream/net xstream/sg xstream/server
-	go build xstream/net xstream/sg
+	go fmt xstream/netin xstream/sg xstream/server
+	go build xstream/netin xstream/sg
 
 clean:
 	@rm -rf pkg/* bin/*

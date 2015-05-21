@@ -1,30 +1,31 @@
 package main
 
 import (
-	"log"
-	"net"
+	"fmt"
 	"net/rpc"
+	"xstream/netin"
 )
 
-func Start(host Host) {
+func Start(host netin.Host) {
 	rpc.Register(&host)
 
-	listener, err := net.Listen("tcp", host.HostInfo.Addr)
-	if err != nil {
-		log.Fatal("listen error: ", err)
-	}
+	// listener, err := net.Listen("tcp", host.HostInfo.Addr)
+	// if err != nil {
+	// 	log.Fatal("listen error: ", err)
+	// }
 
-	for {
-		if conn, err := listener.Accept(); err != nil {
-			log.Print("accept error: " + err.Error())
-		} else {
-			go rpc.ServeConn(conn)
-		}
-	}
+	// for {
+	// 	if conn, err := listener.Accept(); err != nil {
+	// 		log.Print("accept error: " + err.Error())
+	// 	} else {
+	// 		go rpc.ServeConn(conn)
+	// 	}
+	// }
 }
 
 func main() {
 	//here we will init the Host with the SGengine
 	//and then start the Host
 
+	fmt.Println("here")
 }
