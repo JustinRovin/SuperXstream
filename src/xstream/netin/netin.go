@@ -17,9 +17,9 @@ type Host struct {
 }
 
 func (t *Host) UpdateChannel(vert int, reply *int) error {
-	//t.Channel <- vert
+	go func() { t.Channel <- vert }()
 	fmt.Println("THIS SHIT GOT CALLED YO")
-	fmt.Println(vert)
+	fmt.Println(<-t.Channel)
 	return nil
 }
 
