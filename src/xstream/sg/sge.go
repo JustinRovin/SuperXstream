@@ -1,7 +1,7 @@
 package sg
 
 type ScatterGatherEngine interface {
-	Init(string, uint32, chan uint32) error
+	Init() error
 	Scatter() error
 	Gather() error
 }
