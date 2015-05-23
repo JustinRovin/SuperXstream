@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/rpc"
 	"xstream/netin"
+	"xstream/sg"
 )
 
 func Start(host netin.Host) {
@@ -30,11 +31,12 @@ func main() {
 	//here we will init the Host with the SGengine
 	//and then start the Host
 
+	sg.ParseEdges("testgraph", 16)
+
 	hostA := netin.CreateHost("A")
 	fmt.Println("Starting rcp...")
 	Start(hostA)
 	fmt.Println("here")
-
 	/*
 		arith := new(Arith)
 		rpc.Register(arith)
