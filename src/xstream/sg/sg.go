@@ -25,7 +25,8 @@ func ParseEdges(edgeFile string, verticesPerPartition uint32) {
 
 	writeBuffer := bytes.NewBuffer(outBlock)
 	writeBuffer.Reset()
-	var src, dest, weight uint32
+	var src, dest uint32
+	var weight float32
 	_, _ = dest, weight // get around unused variable error
 	numBytes := 0
 
@@ -46,7 +47,7 @@ func ParseEdges(edgeFile string, verticesPerPartition uint32) {
 		for i := 0; i < numBytes; i += 12 {
 			src = *(*uint32)(unsafe.Pointer(&inBlock[i]))
 			dest = *(*uint32)(unsafe.Pointer(&inBlock[i+4]))
-			weight = *(*uint32)(unsafe.Pointer(&inBlock[i+8]))
+			weight = *(*float32)(unsafe.Pointer(&inBlock[i+8]))
 			if src < verticesPerPartition {
 				writeBuffer.Write(inBlock[i : i+12])
 				// fmt.Printf("Edge %d to %d weight %d", src, dest, weight)
