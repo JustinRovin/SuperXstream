@@ -43,6 +43,7 @@ func main() {
 	host := netin.CreateHost(&config, os.Args[2])
 	if host.Partition == 0 {
 		log.Println(host.Info.Addr, "is Partition 0. Accepting graph names")
+		Start(host)
 	} else {
 		log.Println(host.Info.Addr, "is waiting for instructions")
 		Start(host)
