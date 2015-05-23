@@ -1,19 +1,22 @@
 package netin
 
-import "net/rpc"
-import "fmt"
+import (
+	"fmt"
+	"net/rpc"
+)
 
 type HostInfo struct {
 	Hostname string
 	Addr     string
 	Port     string
+	Remote   bool
 }
 
 type Host struct {
-	Info         HostInfo
-	connections  []*rpc.Client
-	Channel      chan int
-	scatterCount int
+	Info        HostInfo
+	Channel     chan int
+	Partition   uint32
+	connections []*rpc.Client
 }
 
 func (t *Host) UpdateChannel(vert int, reply *int) error {
@@ -23,17 +26,27 @@ func (t *Host) UpdateChannel(vert int, reply *int) error {
 	return nil
 }
 
-func CreateHost(myPort string) Host {
+func CreateHost(config *Config, myPort string) Host {
+	hostInfos := createHostInfos(config.Hosts, myPort)
 
-	//var inf HostInfo
-	var conns [3]*rpc.Client
+	var myHostInfo HostInfo
+	var myPartitionIndex uint32
+	for index, host := range hostInfos {
+		if host.Remote == false {
+			myHostInfo = host
+			myPartitionIndex = uint32(index)
+			break
+		}
+	}
 
-	info := HostInfo{Hostname: myPort, Addr: "localhost", Port: "8080"}
+	conns := make([]*rpc.Client, len(hostInfos))
+
 	ci := make(chan int)
 	return Host{
-		Info:        info,
-		connections: conns[:],
+		Info:        myHostInfo,
 		Channel:     ci,
+		Partition:   myPartitionIndex,
+		connections: conns,
 	}
 }
 

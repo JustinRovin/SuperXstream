@@ -2,13 +2,10 @@ SHELL := /bin/sh
 
 .PHONY: all clean
 
-all: common server client
+all: common server
 
 server: common
 	go install xstream/server
-
-client: common
-	go install xstream/client
 
 common: deps
 	go fmt xstream/netin xstream/sg xstream/server
