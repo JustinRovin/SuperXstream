@@ -13,6 +13,7 @@ import (
 	"xstream/netin"
 )
 
+// For some reason this only works on the starting Goroutine
 func Start(host netin.Host) {
 	rpc.Register(&host)
 
@@ -51,32 +52,38 @@ func main() {
 	host := netin.CreateHost(&config, os.Args[2])
 
 	if host.Partition == 0 {
-		go Start(host)
-		DialConnections(host)
-
-		log.Println(host.Info.Addr, "is Partition 0.")
-		log.Println(host.Info.Addr, "is processing graph", os.Args[3])
-		err := netin.PartitionGraph(&host, os.Args[3], false)
-		if err != nil {
-			log.Fatal("PartitionGraph: ", err)
-		}
+		go dialConnections(host)
+		Start(host)
 	} else {
 		log.Println(host.Info.Addr, "is waiting for instructions")
-		go Start(host)
-		DialConnections(host)
+		go dialConnections(host)
+		Start(host)
 	}
 }
 
-func DialConnections(host netin.Host) {
+func runGraph(host netin.Host) {
+	dialConnections(host)
+	log.Println(host.Info.Addr, "is Partition 0.")
+	log.Println(host.Info.Addr, "is processing graph", os.Args[3])
+	err := netin.PartitionGraph(&host, os.Args[3], false)
+	if err != nil {
+		log.Fatal("PartitionGraph: ", err)
+	}
+}
+
+func dialConnections(host netin.Host) {
+	runtime.Gosched()
 	for i, h := range host.PartitionList {
 		if i != host.Partition {
 			for {
 				if client, err := rpc.Dial("tcp", h.Addr); err != nil {
-					fmt.Println("dialing error on paritiion "+strconv.Itoa(host.Partition)+":", err)
-					fmt.Println("Retrying")
-					time.Sleep(100)
+					log.Println("dialing error on paritiion "+
+						strconv.Itoa(host.Partition)+":", err)
+					log.Println("Retrying")
+					time.Sleep(time.Second)
 				} else {
 					host.Connections[i] = client
+					break
 				}
 			}
 		}

@@ -67,9 +67,16 @@ func (self *Host) UpdateChannel(vert int, reply *int) error {
 }
 */
 
-func (self *Host) StartInitEdges(edgeSize uint32, file string) {
+type StartInitEdgesArgs struct {
+	EdgeSize uint32
+	File     string
+}
+
+func (self *Host) StartInitEdges(args *StartInitEdgesArgs, ack *bool) error {
 	//should be go routine
-	go sg.InitEdges(self.ByteChannel, self.NotifyChannel, self.Partition, edgeSize, file)
+	go sg.InitEdges(self.ByteChannel, self.NotifyChannel, self.Partition, args.EdgeSize, args.File)
+	*ack = true
+	return nil
 }
 
 func (self *Host) EndInitEdges() {
