@@ -29,9 +29,9 @@ type ScatterGatherEngine interface {
 // through the channel for the caller to handle.
 
 func InitEdges(bChan chan []byte, nChan chan string,
-	partition int, edgeSize uint32, edgeFile string) error {
+	partition uint32, edgeSize int, edgeFile string) error {
 	outBlock := directio.AlignedBlock(directio.BlockSize)
-	outFile, err := directio.OpenFile(edgeFile+"-"+strconv.Itoa(partition),
+	outFile, err := directio.OpenFile(edgeFile+"-"+strconv.Itoa(int(partition)),
 		os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 
 	if err != nil {
@@ -45,21 +45,14 @@ func InitEdges(bChan chan []byte, nChan chan string,
 	edgesPerBlock := directio.BlockSize / edgeSize
 	blockEdgeCount := 0
 	diskEdgeCount := 0
-	edgeParts := edgeSize / 4
-	partCount := 0
 
 	for {
 		select {
 		case bs := <-bChan:
 			writeBuffer.Write(bs)
-			log.Println("couple of bytes written", bs[0], bs[1])
-			partCount++
-
-			if partCount == int(edgeParts) {
-				diskEdgeCount++
-				blockEdgeCount++
-				partCount = 0
-			}
+			// log.Println("couple of bytes written", bs[0], bs[1])
+			diskEdgeCount++
+			blockEdgeCount++
 
 			if blockEdgeCount == int(edgesPerBlock) {
 				padBlock(writeBuffer, directio.BlockSize)

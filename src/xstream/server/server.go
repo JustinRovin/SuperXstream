@@ -52,7 +52,7 @@ func main() {
 	host := netin.CreateHost(&config, os.Args[2])
 
 	if host.Partition == 0 {
-		go dialConnections(host)
+		go runGraph(host)
 		Start(host)
 	} else {
 		log.Println(host.Info.Addr, "is waiting for instructions")
@@ -74,11 +74,11 @@ func runGraph(host netin.Host) {
 func dialConnections(host netin.Host) {
 	runtime.Gosched()
 	for i, h := range host.PartitionList {
-		if i != host.Partition {
+		if i != int(host.Partition) {
 			for {
 				if client, err := rpc.Dial("tcp", h.Addr); err != nil {
 					log.Println("dialing error on paritiion "+
-						strconv.Itoa(host.Partition)+":", err)
+						strconv.Itoa(int(host.Partition))+":", err)
 					log.Println("Retrying")
 					time.Sleep(time.Second)
 				} else {

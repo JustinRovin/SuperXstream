@@ -1,13 +1,13 @@
 package netin
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/rpc"
 	"os"
+	"time"
 	"unsafe"
 	"xstream/sg"
 
@@ -26,7 +26,7 @@ type Host struct {
 	Info          HostInfo
 	ByteChannel   chan []byte
 	NotifyChannel chan string
-	Partition     int
+	Partition     uint32
 	PartitionList []HostInfo
 	Connections   []*rpc.Client
 }
@@ -52,7 +52,7 @@ func CreateHost(config *Config, myPort string) Host {
 		Info:          myHostInfo,
 		ByteChannel:   ci,
 		NotifyChannel: nc,
-		Partition:     myPartitionIndex,
+		Partition:     uint32(myPartitionIndex),
 		PartitionList: hostInfos,
 		Connections:   conns,
 	}
@@ -68,7 +68,7 @@ func (self *Host) UpdateChannel(vert int, reply *int) error {
 */
 
 type StartInitEdgesArgs struct {
-	EdgeSize uint32
+	EdgeSize int
 	File     string
 }
 
@@ -79,21 +79,25 @@ func (self *Host) StartInitEdges(args *StartInitEdgesArgs, ack *bool) error {
 	return nil
 }
 
-func (self *Host) EndInitEdges() {
+func (self *Host) EndInitEdges(args bool, ack *bool) error {
 	self.NotifyChannel <- "done"
+	*ack = true
+	return nil
 }
 
-func (self *Host) AppendInitEdges(bytes []byte) {
+func (self *Host) AppendInitEdges(bytes []byte, ack *bool) error {
 	self.ByteChannel <- bytes
+	*ack = true
+	return nil
 }
 
-func SendInitEdge(self *Host, partition int, bytes []byte) {
+func SendInitEdge(self *Host, partition uint32, bytes []byte) {
 
 	if self.Partition == partition {
 		self.ByteChannel <- bytes
 	} else {
-		log.Println("partition number:", partition)
-		self.Connections[partition].Call("Host.AppendInitEdges", bytes, nil)
+		var ack bool
+		self.Connections[partition].Call("Host.AppendInitEdges", bytes, &ack)
 	}
 }
 
@@ -102,17 +106,20 @@ func PartitionGraph(self *Host, file string, includeWeights bool) error {
 		return errors.New("Graph processing must be done Host Partition 0")
 	}
 
-	edgeSize := 8
+	var edgeSize int = 8
 	if includeWeights {
 		edgeSize = 12
 	}
 
+	args := StartInitEdgesArgs{EdgeSize: edgeSize, File: file}
+	var ack bool
+
 	//Here all of the hosts have their SG engines prepared to recieve edges
 	for i, c := range self.Connections {
-		if i == self.Partition {
-			go sg.InitEdges(self.ByteChannel, self.NotifyChannel, self.Partition, uint32(edgeSize), file)
+		if i == int(self.Partition) {
+			go sg.InitEdges(self.ByteChannel, self.NotifyChannel, self.Partition, edgeSize, file)
 		} else {
-			err := c.Call("Host.StartInitEdges", edgeSize, file)
+			err := c.Call("Host.StartInitEdges", &args, &ack)
 			if err != nil {
 				fmt.Println("error starting sg initedges:", err)
 			}
@@ -127,7 +134,7 @@ func PartitionGraph(self *Host, file string, includeWeights bool) error {
 	}
 
 	numPartitions := len(self.PartitionList)
-	partitionSize := graphConfig.Graph.Vertices / numPartitions
+	partitionSize := uint32(graphConfig.Graph.Vertices / numPartitions)
 	if graphConfig.Graph.Vertices%numPartitions > 0 {
 		partitionSize++
 	}
@@ -135,10 +142,7 @@ func PartitionGraph(self *Host, file string, includeWeights bool) error {
 	log.Println("# Partitions:", numPartitions)
 	log.Println("Partition Size:", partitionSize)
 
-	/*
-		sg.ParseEdges(file, uint32(numPartitions), uint32(partitionSize),
-			false, nil)
-	*/
+	startTime := time.Now()
 
 	inBlock := directio.AlignedBlock(directio.BlockSize * 3)
 	inFile, err := directio.OpenFile(file, os.O_RDONLY, 0666)
@@ -147,9 +151,8 @@ func PartitionGraph(self *Host, file string, includeWeights bool) error {
 	}
 	defer inFile.Close()
 
-	byteArr := make([]byte, 4)
-	var hostNum, numBytes int
-	var src, dest, weight uint32
+	var numBytes int
+	var hostNum, src, dest, weight uint32
 	_, _ = dest, weight // get around unused variable error
 
 	var i, x int
@@ -161,38 +164,25 @@ func PartitionGraph(self *Host, file string, includeWeights bool) error {
 			numBytes += x
 		}
 
-		for i := 0; i < numBytes; i += 8 {
+		for i := 0; i < numBytes; i += 12 {
 			src = *(*uint32)(unsafe.Pointer(&inBlock[i]))
 			dest = *(*uint32)(unsafe.Pointer(&inBlock[i+4]))
+			weight = *(*uint32)(unsafe.Pointer(&inBlock[i+8]))
 
 			//this should be logic to find host num
-			hostNum = 0
+			hostNum = src / partitionSize
 
-			//send the src bytes
-			binary.LittleEndian.PutUint32(byteArr, src)
-			SendInitEdge(self, hostNum, byteArr)
-			//send the dest bytes
-			binary.LittleEndian.PutUint32(byteArr, dest)
-			SendInitEdge(self, hostNum, byteArr)
-
-			if includeWeights {
-				weight = *(*uint32)(unsafe.Pointer(&inBlock[i+8]))
-				i += 4
-
-				//send the weight bytes in necessary
-				binary.LittleEndian.PutUint32(byteArr, dest)
-				SendInitEdge(self, hostNum, byteArr)
-
-			}
+			SendInitEdge(self, hostNum, inBlock[i:i+edgeSize])
 		}
 	}
 
 	//Here all of the hosts complete the process of recieving edges
 	for i, c := range self.Connections {
-		if i == self.Partition {
+		if i == int(self.Partition) {
 			self.NotifyChannel <- "done"
 		} else {
-			err := c.Call("Host.EndInitEdges", nil, nil)
+			var ack bool
+			err := c.Call("Host.EndInitEdges", true, &ack)
 			if err != nil {
 				fmt.Println("error finishing init edges:", err)
 			}
@@ -200,6 +190,7 @@ func PartitionGraph(self *Host, file string, includeWeights bool) error {
 	}
 
 	log.Println("Finished partitioning graph")
+	log.Println("Time elapsed:", time.Since(startTime))
 	return nil
 }
 

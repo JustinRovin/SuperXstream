@@ -28,7 +28,7 @@ def kill_all(processes):
 def enqueue_output(out, queue, i):
     color = colors[i%len(colors)]
     for line in iter(out.readline, b''):
-        queue.put(color(line.rstrip('\n')))
+        queue.put(color(line.decode('utf-8').rstrip('\n')))
     out.close()
 
 
