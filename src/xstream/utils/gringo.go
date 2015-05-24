@@ -12,15 +12,16 @@ import (
 const queueSize uint64 = 4096
 const indexMask uint64 = queueSize - 1
 
+const MAX_PAYLOAD_SIZE int = 256
+
 type Payload struct {
-	Partition  uint32
-	NumObjects uint32
-	ObjectSize uint32
-	Bytes      [64]byte
+	Size       int
+	ObjectSize int
+	Bytes      [MAX_PAYLOAD_SIZE]byte
 }
 
 // Pad to avoid false sharing
-type Gringo struct {
+type GringoT struct {
 	padding1           [8]uint64
 	lastCommittedIndex uint64
 	padding2           [8]uint64
@@ -32,11 +33,11 @@ type Gringo struct {
 	padding5           [8]uint64
 }
 
-func NewGringo() *Gringo {
-	return &Gringo{lastCommittedIndex: 0, nextFreeIndex: 1, readerIndex: 1}
+func NewGringo() *GringoT {
+	return &GringoT{lastCommittedIndex: 0, nextFreeIndex: 1, readerIndex: 1}
 }
 
-func (self *Gringo) Write(value Payload) {
+func (self *GringoT) Write(value Payload) {
 	var myIndex = atomic.AddUint64(&self.nextFreeIndex, 1) - 1
 	// Wait for reader to catch up, so we don't clobber a slot
 	// which it is (or will be) reading
@@ -52,7 +53,7 @@ func (self *Gringo) Write(value Payload) {
 	}
 }
 
-func (self *Gringo) Read() Payload {
+func (self *GringoT) Read() Payload {
 	var myIndex = atomic.AddUint64(&self.readerIndex, 1) - 1
 	//If reader has out-run writer, wait for a value to be committed
 	for myIndex > self.lastCommittedIndex {

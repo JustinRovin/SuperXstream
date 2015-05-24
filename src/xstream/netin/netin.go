@@ -7,9 +7,11 @@ import (
 	"log"
 	"net/rpc"
 	"os"
+	"strconv"
 	"time"
 	"unsafe"
 	"xstream/sg"
+	"xstream/utils"
 
 	"code.google.com/p/gcfg"
 	"github.com/ncw/directio"
@@ -24,9 +26,8 @@ type HostInfo struct {
 
 type Host struct {
 	Info          HostInfo
-	ByteChannel   chan []byte
-	NotifyChannel chan string
-	Partition     uint32
+	Gringo        *utils.GringoT
+	Partition     int
 	PartitionList []HostInfo
 	Connections   []*rpc.Client
 }
@@ -46,26 +47,15 @@ func CreateHost(config *Config, myPort string) Host {
 
 	conns := make([]*rpc.Client, len(hostInfos))
 
-	ci := make(chan []byte)
-	nc := make(chan string)
+	gringo := utils.NewGringo()
 	return Host{
 		Info:          myHostInfo,
-		ByteChannel:   ci,
-		NotifyChannel: nc,
-		Partition:     uint32(myPartitionIndex),
+		Gringo:        gringo,
+		Partition:     myPartitionIndex,
 		PartitionList: hostInfos,
 		Connections:   conns,
 	}
 }
-
-/*
-func (self *Host) UpdateChannel(vert int, reply *int) error {
-	go func() { self.Channel <- vert }()
-	fmt.Println("THIS SHIT GOT CALLED YO")
-	fmt.Println(<-self.Channel)
-	return nil
-}
-*/
 
 type StartInitEdgesArgs struct {
 	EdgeSize int
@@ -73,32 +63,17 @@ type StartInitEdgesArgs struct {
 }
 
 func (self *Host) StartInitEdges(args *StartInitEdgesArgs, ack *bool) error {
-	//should be go routine
-	go sg.InitEdges(self.ByteChannel, self.NotifyChannel, self.Partition, args.EdgeSize, args.File)
+	go sg.InitEdges(self.Gringo, args.EdgeSize,
+		args.File+"-"+strconv.Itoa(self.Partition))
+
 	*ack = true
 	return nil
 }
 
-func (self *Host) EndInitEdges(args bool, ack *bool) error {
-	self.NotifyChannel <- "done"
+func (self *Host) AppendEdges(payload utils.Payload, ack *bool) error {
+	self.Gringo.Write(payload)
 	*ack = true
 	return nil
-}
-
-func (self *Host) AppendInitEdges(bytes []byte, ack *bool) error {
-	self.ByteChannel <- bytes
-	*ack = true
-	return nil
-}
-
-func SendInitEdge(self *Host, partition uint32, bytes []byte) {
-
-	if self.Partition == partition {
-		self.ByteChannel <- bytes
-	} else {
-		var ack bool
-		self.Connections[partition].Call("Host.AppendInitEdges", bytes, &ack)
-	}
 }
 
 func PartitionGraph(self *Host, file string, includeWeights bool) error {
@@ -116,8 +91,9 @@ func PartitionGraph(self *Host, file string, includeWeights bool) error {
 
 	//Here all of the hosts have their SG engines prepared to recieve edges
 	for i, c := range self.Connections {
-		if i == int(self.Partition) {
-			go sg.InitEdges(self.ByteChannel, self.NotifyChannel, self.Partition, edgeSize, file)
+		if i == self.Partition {
+			go sg.InitEdges(self.Gringo, edgeSize,
+				file+"-"+strconv.Itoa(self.Partition))
 		} else {
 			err := c.Call("Host.StartInitEdges", &args, &ack)
 			if err != nil {
@@ -152,8 +128,15 @@ func PartitionGraph(self *Host, file string, includeWeights bool) error {
 	defer inFile.Close()
 
 	var numBytes int
-	var hostNum, src, dest, weight uint32
-	_, _ = dest, weight // get around unused variable error
+	var hostNum, src uint32
+	var partition32 uint32 = uint32(self.Partition) // freakin Go
+
+	payloads := make([]*utils.Payload, len(self.PartitionList))
+	for i := 0; i < len(payloads); i++ {
+		payloads[i] = &utils.Payload{Size: 0, ObjectSize: edgeSize}
+	}
+
+	var payload *utils.Payload
 
 	var i, x int
 	for err != io.EOF && err != io.ErrUnexpectedEOF {
@@ -166,23 +149,41 @@ func PartitionGraph(self *Host, file string, includeWeights bool) error {
 
 		for i := 0; i < numBytes; i += 12 {
 			src = *(*uint32)(unsafe.Pointer(&inBlock[i]))
-			dest = *(*uint32)(unsafe.Pointer(&inBlock[i+4]))
-			weight = *(*uint32)(unsafe.Pointer(&inBlock[i+8]))
 
 			//this should be logic to find host num
 			hostNum = src / partitionSize
 
-			SendInitEdge(self, hostNum, inBlock[i:i+edgeSize])
+			payload = payloads[hostNum]
+			copy(payload.Bytes[payload.Size:], inBlock[i:i+edgeSize])
+			payload.Size += edgeSize
+			if payload.Size+edgeSize > utils.MAX_PAYLOAD_SIZE {
+				if partition32 == hostNum {
+					self.Gringo.Write(*payload)
+				} else {
+					var ack bool
+					self.Connections[hostNum].Call("Host.AppendEdges",
+						*payload, &ack)
+				}
+
+				payload.Size = 0
+			}
 		}
 	}
 
 	//Here all of the hosts complete the process of recieving edges
 	for i, c := range self.Connections {
-		if i == int(self.Partition) {
-			self.NotifyChannel <- "done"
+		payload = payloads[i]
+
+		// log.Println("Sending payload size", payload.Size)
+		if i == self.Partition {
+			self.Gringo.Write(*payload)
+			payload.Size = 0
+			self.Gringo.Write(*payload)
 		} else {
 			var ack bool
-			err := c.Call("Host.EndInitEdges", true, &ack)
+			err := c.Call("Host.AppendEdges", *payload, &ack)
+			payload.Size = 0
+			err = c.Call("Host.AppendEdges", *payload, &ack)
 			if err != nil {
 				fmt.Println("error finishing init edges:", err)
 			}
