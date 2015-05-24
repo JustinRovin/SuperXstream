@@ -17,7 +17,7 @@ colors = [
     term.red,
 ]
 
-USAGE = '''%s <config-path>'''
+USAGE = '''%s <config-path> <graph-path>'''
 
 
 def kill_all(processes):
@@ -43,7 +43,7 @@ def print_queue(queue):
 
 
 def main(argv):
-    if len(argv) != 2:
+    if len(argv) != 3:
         print USAGE % argv[0]
         exit(1)
 
@@ -55,7 +55,7 @@ def main(argv):
 
     for i, host in enumerate(config['Hosts']):
         hostname, port = host.split(':')
-        p = sp.Popen(['./bin/server', argv[1], port], stdout=sp.PIPE,
+        p = sp.Popen(['./bin/server', argv[1], port, argv[2]], stdout=sp.PIPE,
                 stderr=sp.STDOUT, close_fds=True, bufsize=1)
         t = threading.Thread(target=enqueue_output, args=(p.stdout, q, i))
         t.daemon = True

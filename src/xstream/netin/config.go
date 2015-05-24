@@ -5,11 +5,13 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"runtime"
 	"strings"
 )
 
 type Config struct {
 	Hosts   []string
+	Procs   int
 	Logging string
 }
 
@@ -19,6 +21,13 @@ func LoadConfig(filename string) (config Config) {
 	if err == nil && json.Unmarshal(jsonBlob, &config) != nil {
 		log.Fatal("LoadConfig: ", err)
 	}
+
+	if config.Procs < 1 {
+		log.Println("LoadConfig: Procs cannot be < 1. Assuming 1.")
+	} else if config.Procs > runtime.NumCPU() {
+		log.Println("LoadConfig: Procs cannot be > NumCPU. Assuming NumCPU.")
+	}
+	log.Println("NumCPU:", runtime.NumCPU())
 
 	if config.Logging != "enable" && config.Logging != "disable" {
 		log.Println("LoadConfig: Invalid value for 'Logging'. " +
@@ -34,7 +43,7 @@ func createHostInfos(hosts []string, myPort string) []HostInfo {
 	myAddrsRaw, err := net.InterfaceAddrs()
 
 	if err != nil {
-		log.Fatal("createPrefList: ", err)
+		log.Fatal("createHostInfos: ", err)
 	}
 
 	// Convert each address to a string and remove the net mask.
@@ -60,7 +69,7 @@ func createHostInfos(hosts []string, myPort string) []HostInfo {
 			hostAddrs, err := net.LookupHost(host)
 
 			if err != nil {
-				log.Fatal("createPrefList: ", err)
+				log.Fatal("createHostInfos: ", err)
 			}
 
 			if addressesOverlap(myAddrs, hostAddrs) {

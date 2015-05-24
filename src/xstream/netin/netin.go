@@ -1,8 +1,13 @@
 package netin
 
 import (
+	"errors"
 	"fmt"
+	"log"
 	"net/rpc"
+	"xstream/sg"
+
+	"code.google.com/p/gcfg"
 )
 
 type HostInfo struct {
@@ -13,28 +18,22 @@ type HostInfo struct {
 }
 
 type Host struct {
-	Info        HostInfo
-	Channel     chan int
-	Partition   uint32
-	connections []*rpc.Client
-}
-
-func (t *Host) UpdateChannel(vert int, reply *int) error {
-	go func() { t.Channel <- vert }()
-	fmt.Println("THIS SHIT GOT CALLED YO")
-	fmt.Println(<-t.Channel)
-	return nil
+	Info          HostInfo
+	Channel       chan int
+	Partition     int
+	PartitionList []HostInfo
+	connections   []*rpc.Client
 }
 
 func CreateHost(config *Config, myPort string) Host {
 	hostInfos := createHostInfos(config.Hosts, myPort)
 
 	var myHostInfo HostInfo
-	var myPartitionIndex uint32
+	var myPartitionIndex int
 	for index, host := range hostInfos {
 		if host.Remote == false {
 			myHostInfo = host
-			myPartitionIndex = uint32(index)
+			myPartitionIndex = index
 			break
 		}
 	}
@@ -43,11 +42,45 @@ func CreateHost(config *Config, myPort string) Host {
 
 	ci := make(chan int)
 	return Host{
-		Info:        myHostInfo,
-		Channel:     ci,
-		Partition:   myPartitionIndex,
-		connections: conns,
+		Info:          myHostInfo,
+		Channel:       ci,
+		Partition:     myPartitionIndex,
+		PartitionList: hostInfos,
+		connections:   conns,
 	}
+}
+
+func (self *Host) UpdateChannel(vert int, reply *int) error {
+	go func() { self.Channel <- vert }()
+	fmt.Println("THIS SHIT GOT CALLED YO")
+	fmt.Println(<-self.Channel)
+	return nil
+}
+
+func PartitionGraph(self *Host, file string) error {
+	if self.Partition != 0 {
+		return errors.New("Graph processing must be done Host Partition 0")
+	}
+
+	var graphConfig sg.GraphConfig
+	err := gcfg.ReadFileInto(&graphConfig, file+".ini")
+	if err != nil {
+		return err
+	}
+
+	numPartitions := len(self.PartitionList)
+	partitionSize := graphConfig.Graph.Vertices / numPartitions
+	if graphConfig.Graph.Vertices%numPartitions > 0 {
+		partitionSize++
+	}
+
+	log.Println("# Partitions:", numPartitions)
+	log.Println("Partition Size:", partitionSize)
+
+	sg.ParseEdges(file, uint32(partitionSize), false, nil)
+
+	log.Println("Finished partitioning graph")
+	return nil
 }
 
 /*
