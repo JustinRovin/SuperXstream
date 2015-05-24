@@ -77,7 +77,8 @@ func PartitionGraph(self *Host, file string) error {
 	log.Println("# Partitions:", numPartitions)
 	log.Println("Partition Size:", partitionSize)
 
-	sg.ParseEdges(file, uint32(partitionSize), false, nil)
+	sg.ParseEdges(file, uint32(numPartitions), uint32(partitionSize),
+		false, nil)
 
 	log.Println("Finished partitioning graph")
 	return nil

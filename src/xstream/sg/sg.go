@@ -29,8 +29,8 @@ type ScatterGatherEngine interface {
 // ParseEdges Iterates a given file of edges and writes the edges belonging to
 // partition 0 to a new file "|edgeFile|-0". The rest of the edges are sent
 // through the channel for the caller to handle.
-func ParseEdges(edgeFile string, partitionSize uint32, includeWeights bool,
-	gringo *utils.Gringo) {
+func ParseEdges(edgeFile string, numPartitions uint32, partitionSize uint32,
+	includeWeights bool, gringo *utils.Gringo) {
 	inBlock := directio.AlignedBlock(directio.BlockSize * 3)
 	outBlock := directio.AlignedBlock(directio.BlockSize)
 
@@ -38,14 +38,13 @@ func ParseEdges(edgeFile string, partitionSize uint32, includeWeights bool,
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	defer inFile.Close()
+
 	outFile, err := directio.OpenFile(edgeFile+"-0",
 		os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	defer outFile.Close()
 
 	writeBuffer := bytes.NewBuffer(outBlock)
@@ -61,16 +60,23 @@ func ParseEdges(edgeFile string, partitionSize uint32, includeWeights bool,
 	}
 	edgesPerBlock := directio.BlockSize / edgeSize
 	blockEdgeCount := 0
-	localEdgeCount := 0
+	diskEdgeCount := 0
 
+	payloads := make([]utils.Payload, partitionSize-1)
+	for i, p := range payloads {
+		p.Partition = uint32(i + 1)
+		p.NumObjects = 0
+		p.ObjectSize = uint32(edgeSize)
+	}
+
+	var i, x int
 	for err != io.EOF && err != io.ErrUnexpectedEOF {
-		var x, y, z int
-		x, _ = io.ReadFull(inFile, inBlock[0:directio.BlockSize])
-		y, _ = io.ReadFull(inFile,
-			inBlock[directio.BlockSize:2*directio.BlockSize])
-		z, err = io.ReadFull(inFile,
-			inBlock[2*directio.BlockSize:3*directio.BlockSize])
-		numBytes = x + y + z
+		numBytes = 0
+		for i = 0; i < 3; i++ {
+			x, err = io.ReadFull(inFile,
+				inBlock[i*directio.BlockSize:(i+1)*directio.BlockSize])
+			numBytes += x
+		}
 
 		for i := 0; i < numBytes; i += 12 {
 			src = *(*uint32)(unsafe.Pointer(&inBlock[i]))
@@ -78,9 +84,8 @@ func ParseEdges(edgeFile string, partitionSize uint32, includeWeights bool,
 			weight = *(*float32)(unsafe.Pointer(&inBlock[i+8]))
 			if src < partitionSize {
 				writeBuffer.Write(inBlock[i : i+edgeSize])
-				// fmt.Printf("Edge %d to %d weight %d", src, dest, weight)
 
-				localEdgeCount++
+				diskEdgeCount++
 				blockEdgeCount++
 				if blockEdgeCount == edgesPerBlock {
 					padBlock(writeBuffer, directio.BlockSize)
@@ -99,7 +104,7 @@ func ParseEdges(edgeFile string, partitionSize uint32, includeWeights bool,
 		outFile.Write(writeBuffer.Bytes())
 	}
 
-	log.Println(localEdgeCount, " edges written to disk")
+	log.Println(diskEdgeCount, " edges written to disk")
 }
 
 func padBlock(buffer *bytes.Buffer, blockSize int) {

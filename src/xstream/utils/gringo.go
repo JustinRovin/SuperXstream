@@ -12,10 +12,11 @@ import (
 const queueSize uint64 = 4096
 const indexMask uint64 = queueSize - 1
 
-// Should fill 1 cache line
 type Payload struct {
-	Partition int64
-	Bytes     [56]byte
+	Partition  uint32
+	NumObjects uint32
+	ObjectSize uint32
+	Bytes      [64]byte
 }
 
 // Pad to avoid false sharing
