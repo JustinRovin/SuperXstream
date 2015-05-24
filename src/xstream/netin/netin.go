@@ -1,13 +1,18 @@
 package netin
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/rpc"
+	"os"
+	"unsafe"
 	"xstream/sg"
 
 	"code.google.com/p/gcfg"
+	"github.com/ncw/directio"
 )
 
 type HostInfo struct {
@@ -19,10 +24,11 @@ type HostInfo struct {
 
 type Host struct {
 	Info          HostInfo
-	Channel       chan int
+	ByteChannel   chan []byte
+	NotifyChannel chan string
 	Partition     int
 	PartitionList []HostInfo
-	connections   []*rpc.Client
+	Connections   []*rpc.Client
 }
 
 func CreateHost(config *Config, myPort string) Host {
@@ -40,29 +46,74 @@ func CreateHost(config *Config, myPort string) Host {
 
 	conns := make([]*rpc.Client, len(hostInfos))
 
-	ci := make(chan int)
+	ci := make(chan []byte)
+	nc := make(chan string)
 	return Host{
 		Info:          myHostInfo,
-		Channel:       ci,
+		ByteChannel:   ci,
+		NotifyChannel: nc,
 		Partition:     myPartitionIndex,
 		PartitionList: hostInfos,
-		connections:   conns,
+		Connections:   conns,
 	}
 }
 
+/*
 func (self *Host) UpdateChannel(vert int, reply *int) error {
 	go func() { self.Channel <- vert }()
 	fmt.Println("THIS SHIT GOT CALLED YO")
 	fmt.Println(<-self.Channel)
 	return nil
 }
+*/
 
-func PartitionGraph(self *Host, file string) error {
+func (self *Host) StartInitEdges(edgeSize uint32, file string) {
+	//should be go routine
+	go sg.InitEdges(self.ByteChannel, self.NotifyChannel, self.Partition, edgeSize, file)
+}
+
+func (self *Host) EndInitEdges() {
+	self.NotifyChannel <- "done"
+}
+
+func (self *Host) AppendInitEdges(bytes []byte) {
+	self.ByteChannel <- bytes
+}
+
+func SendInitEdge(self *Host, partition int, bytes []byte) {
+
+	if self.Partition == partition {
+		self.ByteChannel <- bytes
+	} else {
+		log.Println("partition number:", partition)
+		self.Connections[partition].Call("Host.AppendInitEdges", bytes, nil)
+	}
+}
+
+func PartitionGraph(self *Host, file string, includeWeights bool) error {
 	if self.Partition != 0 {
 		return errors.New("Graph processing must be done Host Partition 0")
 	}
 
+	edgeSize := 8
+	if includeWeights {
+		edgeSize = 12
+	}
+
+	//Here all of the hosts have their SG engines prepared to recieve edges
+	for i, c := range self.Connections {
+		if i == self.Partition {
+			go sg.InitEdges(self.ByteChannel, self.NotifyChannel, self.Partition, uint32(edgeSize), file)
+		} else {
+			err := c.Call("Host.StartInitEdges", edgeSize, file)
+			if err != nil {
+				fmt.Println("error starting sg initedges:", err)
+			}
+		}
+	}
+
 	var graphConfig sg.GraphConfig
+
 	err := gcfg.ReadFileInto(&graphConfig, file+".ini")
 	if err != nil {
 		return err
@@ -77,8 +128,69 @@ func PartitionGraph(self *Host, file string) error {
 	log.Println("# Partitions:", numPartitions)
 	log.Println("Partition Size:", partitionSize)
 
-	sg.ParseEdges(file, uint32(numPartitions), uint32(partitionSize),
-		false, nil)
+	/*
+		sg.ParseEdges(file, uint32(numPartitions), uint32(partitionSize),
+			false, nil)
+	*/
+
+	inBlock := directio.AlignedBlock(directio.BlockSize * 3)
+	inFile, err := directio.OpenFile(file, os.O_RDONLY, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer inFile.Close()
+
+	byteArr := make([]byte, 4)
+	var hostNum, numBytes int
+	var src, dest, weight uint32
+	_, _ = dest, weight // get around unused variable error
+
+	var i, x int
+	for err != io.EOF && err != io.ErrUnexpectedEOF {
+		numBytes = 0
+		for i = 0; i < 3; i++ {
+			x, err = io.ReadFull(inFile,
+				inBlock[i*directio.BlockSize:(i+1)*directio.BlockSize])
+			numBytes += x
+		}
+
+		for i := 0; i < numBytes; i += 8 {
+			src = *(*uint32)(unsafe.Pointer(&inBlock[i]))
+			dest = *(*uint32)(unsafe.Pointer(&inBlock[i+4]))
+
+			//this should be logic to find host num
+			hostNum = 0
+
+			//send the src bytes
+			binary.LittleEndian.PutUint32(byteArr, src)
+			SendInitEdge(self, hostNum, byteArr)
+			//send the dest bytes
+			binary.LittleEndian.PutUint32(byteArr, dest)
+			SendInitEdge(self, hostNum, byteArr)
+
+			if includeWeights {
+				weight = *(*uint32)(unsafe.Pointer(&inBlock[i+8]))
+				i += 4
+
+				//send the weight bytes in necessary
+				binary.LittleEndian.PutUint32(byteArr, dest)
+				SendInitEdge(self, hostNum, byteArr)
+
+			}
+		}
+	}
+
+	//Here all of the hosts complete the process of recieving edges
+	for i, c := range self.Connections {
+		if i == self.Partition {
+			self.NotifyChannel <- "done"
+		} else {
+			err := c.Call("Host.EndInitEdges", nil, nil)
+			if err != nil {
+				fmt.Println("error finishing init edges:", err)
+			}
+		}
+	}
 
 	log.Println("Finished partitioning graph")
 	return nil
