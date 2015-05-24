@@ -2,11 +2,9 @@ package sg
 
 import (
 	"bytes"
-	"io"
 	"log"
 	"os"
-	"unsafe"
-	"xstream/utils"
+	"strconv"
 
 	"github.com/ncw/directio"
 )
@@ -29,6 +27,60 @@ type ScatterGatherEngine interface {
 // ParseEdges Iterates a given file of edges and writes the edges belonging to
 // partition 0 to a new file "|edgeFile|-0". The rest of the edges are sent
 // through the channel for the caller to handle.
+
+func InitEdges(bChan chan []byte, nChan chan string,
+	partition int, edgeSize uint32, edgeFile string) error {
+	outBlock := directio.AlignedBlock(directio.BlockSize)
+	outFile, err := directio.OpenFile(edgeFile+"-"+strconv.Itoa(partition),
+		os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer outFile.Close()
+
+	writeBuffer := bytes.NewBuffer(outBlock)
+	writeBuffer.Reset()
+
+	edgesPerBlock := directio.BlockSize / edgeSize
+	blockEdgeCount := 0
+	diskEdgeCount := 0
+	edgeParts := edgeSize / 4
+	partCount := 0
+
+	for {
+		select {
+		case bs := <-bChan:
+			writeBuffer.Write(bs)
+			log.Println("couple of bytes written", bs[0], bs[1])
+			partCount++
+
+			if partCount == int(edgeParts) {
+				diskEdgeCount++
+				blockEdgeCount++
+				partCount = 0
+			}
+
+			if blockEdgeCount == int(edgesPerBlock) {
+				padBlock(writeBuffer, directio.BlockSize)
+				outFile.Write(writeBuffer.Bytes())
+				writeBuffer.Reset()
+				blockEdgeCount = 0
+			}
+
+		case d := <-nChan:
+			if blockEdgeCount > 0 {
+				padBlock(writeBuffer, directio.BlockSize)
+				outFile.Write(writeBuffer.Bytes())
+			}
+
+			log.Println(diskEdgeCount, " edges written to disk ", d)
+			break
+		}
+	}
+}
+
+/*
 func ParseEdges(edgeFile string, numPartitions uint32, partitionSize uint32,
 	includeWeights bool, gringo *utils.Gringo) {
 	inBlock := directio.AlignedBlock(directio.BlockSize * 3)
@@ -106,7 +158,7 @@ func ParseEdges(edgeFile string, numPartitions uint32, partitionSize uint32,
 
 	log.Println(diskEdgeCount, " edges written to disk")
 }
-
+*/
 func padBlock(buffer *bytes.Buffer, blockSize int) {
 	for length := buffer.Len(); length < blockSize; length++ {
 		buffer.WriteByte(0)

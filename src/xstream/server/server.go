@@ -8,6 +8,8 @@ import (
 	"net/rpc"
 	"os"
 	"runtime"
+	"strconv"
+	"time"
 	"xstream/netin"
 )
 
@@ -50,15 +52,34 @@ func main() {
 
 	if host.Partition == 0 {
 		go Start(host)
+		DialConnections(host)
 
 		log.Println(host.Info.Addr, "is Partition 0.")
 		log.Println(host.Info.Addr, "is processing graph", os.Args[3])
-		err := netin.PartitionGraph(&host, os.Args[3])
+		err := netin.PartitionGraph(&host, os.Args[3], false)
 		if err != nil {
 			log.Fatal("PartitionGraph: ", err)
 		}
 	} else {
 		log.Println(host.Info.Addr, "is waiting for instructions")
-		Start(host)
+		go Start(host)
+		DialConnections(host)
 	}
+}
+
+func DialConnections(host netin.Host) {
+	for i, h := range host.PartitionList {
+		if i != host.Partition {
+			for {
+				if client, err := rpc.Dial("tcp", h.Addr); err != nil {
+					fmt.Println("dialing error on paritiion "+strconv.Itoa(host.Partition)+":", err)
+					fmt.Println("Retrying")
+					time.Sleep(100)
+				} else {
+					host.Connections[i] = client
+				}
+			}
+		}
+	}
+	log.Println("Done Dialing")
 }
