@@ -58,6 +58,9 @@ func IncrementGatherCount(self *Host) error {
 
 		//Im thinking we could either call this here, or it could just be called
 		//implicitly in getOutputPayloads?? what do you think?
+		//Having this abstracted away from get output payloads could be nice actually, 
+		//because then we could switch up the different algorithms we run on the graph
+		//pretty easily
 		sg.ProcessUpdates()
 
 		//Im thinking this function "getOutputPayloads" could return a 2d array of payloads
