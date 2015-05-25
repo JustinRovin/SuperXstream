@@ -42,46 +42,52 @@ func RecieveUpdates(self *Host) error {
 			sg.AppendUpdate(payload)
 		}
 	}
+
+	return nil
 }
 
-func IncrementGatherCount(self *Host) error {
+func IncrementGatherCount() error {
 	self.GatherCount++
 
-	if (self.GatherCount == len(self.PartitionList)) {
+	if self.GatherCount == len(self.PartitionList) {
 		self.GatherCount = 0
 
-		//Im thinking we could either call this here, or it could just be called 
+		//Im thinking we could either call this here, or it could just be called
 		//implicitly in getOutputPayloads?? what do you think?
-		sg.processUpdates()
+		sg.ProcessUpdates()
 
 		//Im thinking this function "getOutputPayloads" could return a 2d array of payloads
-		//where the list of update payloads to route will be at the index of the 
+		//where the list of update payloads to route will be at the index of the
 		//partition number it should go to (obviously), then the last partition in that
-		//list will be of size 0. Then in sendUpdates Ill just blindly send off all the 
-		//payloads 
-		payloads := sg.getOutputPayloads()
-		go SendUpdates(self, paylaods)
+		//list will be of size 0. Then in sendUpdates Ill just blindly send off all the
+		//payloads
+		payloads := sg.GetOutputPayloads()
+		go SendUpdates(self, payloads)
 	}
+
+	return nil
 }
 
 func SendUpdates(self *Host, payloadLists [][]*utils.Payload) error {
 	for i, pList := range payloadLists {
-		if (i == self.Parititon) {
-			for p := range pList {
-				self.Gringo.Write(p)
+		if i == self.Partition {
+			for _, p := range pList {
+				self.Gringo.Write(*p)
 			}
 		} else {
 			var ack bool
 
 			for p := range pList {
-				self.Connections[i].Call("RemoteUpdate", p, &ack)				
+				self.Connections[i].Call("RemoteUpdate", p, &ack)
 			}
 		}
 	}
+
+	return nil
 }
 
 func (self *Host) RemoteUpdate(payload utils.Payload, ack *bool) error {
-	self.Gringo.Write(p)
+	self.Gringo.Write(payload)
 
 	*ack = true
 	return nil
@@ -250,19 +256,3 @@ func PartitionGraph(self *Host, file string, includeWeights bool) error {
 	log.Println("Time elapsed:", time.Since(startTime))
 	return nil
 }
-
-/*
-func (h *Host) AppendUin(updates *UpdateList, confim *bool) error {
-	//this will append updates to the Update In Buffer
-
-}
-*/
-/*
-func (h *Host)
-() {
-	//this function will increment the scatter count
-	//if scatter scount equals the total number of partitions/hosts
-	//Gather will be called on the local host
-
-}
-*/

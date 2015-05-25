@@ -24,6 +24,25 @@ type ScatterGatherEngine interface {
 	Gather() error
 }
 
+func AppendUpdate(payload utils.Payload) {
+
+}
+
+//Not sure how you want to do this one, Maybe we can implicitly call
+//call this in getOutputPayloads, if so we should remove the call
+//from IncrementGatherCount in netin
+func ProcessUpdates() {
+
+}
+
+//I think it would be nice if this returned a 2d array of paylaod lists
+//refer to the IncrementGatherCount function in netin
+//for how I was thinking we would use this
+func GetOutputPayloads() [][]*utils.Payload {
+
+	return nil
+}
+
 func InitEdges(gringo *utils.GringoT, edgeSize int, edgeFile string) error {
 	outBlock := directio.AlignedBlock(directio.BlockSize)
 	outFile, err := directio.OpenFile(edgeFile,
