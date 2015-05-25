@@ -1,0 +1,8 @@
+{
+    "Hosts": [
+        "ec2-52-8-124-64.us-west-1.compute.amazonaws.com:8090",
+        "ec2-52-8-74-150.us-west-1.compute.amazonaws.com:8090"
+    ],
+    "Procs": 2,
+    "Logging": "enable"
+}
