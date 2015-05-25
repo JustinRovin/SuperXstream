@@ -30,6 +30,61 @@ type Host struct {
 	Partition     int
 	PartitionList []HostInfo
 	Connections   []*rpc.Client
+	GatherCount   int
+}
+
+func RecieveUpdates(self *Host) error {
+	for {
+		payload := self.Gringo.Read()
+		if payload.Size == 0 {
+			IncrementGatherCount(self)
+		} else {
+			sg.AppendUpdate(payload)
+		}
+	}
+}
+
+func IncrementGatherCount(self *Host) error {
+	self.GatherCount++
+
+	if (self.GatherCount == len(self.PartitionList)) {
+		self.GatherCount = 0
+
+		//Im thinking we could either call this here, or it could just be called 
+		//implicitly in getOutputPayloads?? what do you think?
+		sg.processUpdates()
+
+		//Im thinking this function "getOutputPayloads" could return a 2d array of payloads
+		//where the list of update payloads to route will be at the index of the 
+		//partition number it should go to (obviously), then the last partition in that
+		//list will be of size 0. Then in sendUpdates Ill just blindly send off all the 
+		//payloads 
+		payloads := sg.getOutputPayloads()
+		go SendUpdates(self, paylaods)
+	}
+}
+
+func SendUpdates(self *Host, payloadLists [][]*utils.Payload) error {
+	for i, pList := range payloadLists {
+		if (i == self.Parititon) {
+			for p := range pList {
+				self.Gringo.Write(p)
+			}
+		} else {
+			var ack bool
+
+			for p := range pList {
+				self.Connections[i].Call("RemoteUpdate", p, &ack)				
+			}
+		}
+	}
+}
+
+func (self *Host) RemoteUpdate(payload utils.Payload, ack *bool) error {
+	self.Gringo.Write(p)
+
+	*ack = true
+	return nil
 }
 
 func CreateHost(config *Config, myPort string) Host {
@@ -54,6 +109,7 @@ func CreateHost(config *Config, myPort string) Host {
 		Partition:     myPartitionIndex,
 		PartitionList: hostInfos,
 		Connections:   conns,
+		GatherCount:   0,
 	}
 }
 
