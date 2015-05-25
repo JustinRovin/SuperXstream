@@ -62,7 +62,7 @@ func IncrementGatherCount(self *Host) error {
 
 		//Im thinking this function "getOutputPayloads" could return a 2d array of payloads
 		//where the list of update payloads to route will be at the index of the
-		//partition number it should go to (obviously), then the last partition in that
+		//partition number it should go to (obviously), then the last payload in that
 		//list will be of size 0. Then in sendUpdates Ill just blindly send off all the
 		//payloads
 		payloads := sg.GetOutputPayloads()
