@@ -137,8 +137,8 @@ func (self *Host) StartInitEdges(args *StartInitEdgesArgs, ack *bool) error {
 	return nil
 }
 
-func (self *Host) AppendEdges(payload utils.Payload, ack *bool) error {
-	self.Gringo.Write(payload)
+func (self *Host) AppendEdges(payload *utils.Payload, ack *bool) error {
+	self.Gringo.Write(*payload)
 	*ack = true
 	return nil
 }
@@ -225,10 +225,10 @@ func PartitionGraph(self *Host, file string, includeWeights bool) error {
 			if payload.Size+edgeSize > utils.MAX_PAYLOAD_SIZE {
 				var ack bool
 				if partition32 == hostNum {
-					self.AppendEdges(*payload, &ack)
+					self.AppendEdges(payload, &ack)
 				} else {
 					self.Connections[hostNum].Call("Host.AppendEdges",
-						*payload, &ack)
+						payload, &ack)
 				}
 
 				payload.Size = 0
@@ -243,13 +243,13 @@ func PartitionGraph(self *Host, file string, includeWeights bool) error {
 
 		// log.Println("Sending payload size", payload.Size)
 		if i == self.Partition {
-			self.AppendEdges(*payload, &ack)
+			self.AppendEdges(payload, &ack)
 			payload.Size = 0
-			self.AppendEdges(*payload, &ack)
+			self.AppendEdges(payload, &ack)
 		} else {
-			err := c.Call("Host.AppendEdges", *payload, &ack)
+			err := c.Call("Host.AppendEdges", payload, &ack)
 			payload.Size = 0
-			err = c.Call("Host.AppendEdges", *payload, &ack)
+			err = c.Call("Host.AppendEdges", payload, &ack)
 			if err != nil {
 				fmt.Println("error finishing init edges:", err)
 			}
