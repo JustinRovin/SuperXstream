@@ -25,7 +25,7 @@ func Start(host *netin.Host) {
 
 	//this is going to be the go routine that constantly
 	//listens for writes to the Host Gringo buffer
-	go netin.RecieveUpdates(host)
+	go netin.StartUpdateListener(host)
 
 	for {
 		if conn, err := listener.Accept(); err != nil {

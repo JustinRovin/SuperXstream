@@ -34,7 +34,7 @@ type Host struct {
 	NotifyChannel chan string
 }
 
-func RecieveUpdates(self *Host) error {
+func StartUpdateListener(self *Host) error {
 	<-self.NotifyChannel
 	log.Println(self.Info.Addr, "is now waiting for gather updates")
 
@@ -74,15 +74,14 @@ func IncrementGatherCount(self *Host) error {
 
 func SendUpdates(self *Host, payloadLists [][]*utils.Payload) error {
 	for i, pList := range payloadLists {
+		var ack bool
 		if i == self.Partition {
 			for _, p := range pList {
-				self.Gringo.Write(*p)
+				self.PushUpdate(p, &ack)
 			}
 		} else {
-			var ack bool
-
 			for p := range pList {
-				self.Connections[i].Call("RemoteUpdate", p, &ack)
+				self.Connections[i].Call("PushUpdate", p, &ack)
 			}
 		}
 	}
@@ -90,8 +89,8 @@ func SendUpdates(self *Host, payloadLists [][]*utils.Payload) error {
 	return nil
 }
 
-func (self *Host) RemoteUpdate(payload utils.Payload, ack *bool) error {
-	self.Gringo.Write(payload)
+func (self *Host) PushUpdate(payload *utils.Payload, ack *bool) error {
+	self.Gringo.Write(*payload)
 
 	*ack = true
 	return nil
