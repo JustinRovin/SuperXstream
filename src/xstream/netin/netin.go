@@ -39,14 +39,14 @@ func RecieveUpdates(self *Host) error {
 		if payload.Size == 0 {
 			IncrementGatherCount(self)
 		} else {
-			sg.AppendUpdate(payload)
+			sg.AppendUpdate(&payload)
 		}
 	}
 
 	return nil
 }
 
-func IncrementGatherCount() error {
+func IncrementGatherCount(self *Host) error {
 	self.GatherCount++
 
 	if self.GatherCount == len(self.PartitionList) {
@@ -154,8 +154,7 @@ func PartitionGraph(self *Host, file string, includeWeights bool) error {
 	//Here all of the hosts have their SG engines prepared to recieve edges
 	for i, c := range self.Connections {
 		if i == self.Partition {
-			go sg.InitEdges(self.Gringo, edgeSize,
-				file+"-"+strconv.Itoa(self.Partition))
+			self.StartInitEdges(&args, &ack)
 		} else {
 			err := c.Call("Host.StartInitEdges", &args, &ack)
 			if err != nil {
@@ -219,10 +218,10 @@ func PartitionGraph(self *Host, file string, includeWeights bool) error {
 			copy(payload.Bytes[payload.Size:], inBlock[i:i+edgeSize])
 			payload.Size += edgeSize
 			if payload.Size+edgeSize > utils.MAX_PAYLOAD_SIZE {
+				var ack bool
 				if partition32 == hostNum {
-					self.Gringo.Write(*payload)
+					self.AppendEdges(*payload, &ack)
 				} else {
-					var ack bool
 					self.Connections[hostNum].Call("Host.AppendEdges",
 						*payload, &ack)
 				}
@@ -235,14 +234,14 @@ func PartitionGraph(self *Host, file string, includeWeights bool) error {
 	//Here all of the hosts complete the process of recieving edges
 	for i, c := range self.Connections {
 		payload = payloads[i]
+		var ack bool
 
 		// log.Println("Sending payload size", payload.Size)
 		if i == self.Partition {
-			self.Gringo.Write(*payload)
+			self.AppendEdges(*payload, &ack)
 			payload.Size = 0
-			self.Gringo.Write(*payload)
+			self.AppendEdges(*payload, &ack)
 		} else {
-			var ack bool
 			err := c.Call("Host.AppendEdges", *payload, &ack)
 			payload.Size = 0
 			err = c.Call("Host.AppendEdges", *payload, &ack)

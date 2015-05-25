@@ -24,7 +24,7 @@ type ScatterGatherEngine interface {
 	Gather() error
 }
 
-func AppendUpdate(payload utils.Payload) {
+func AppendUpdate(payload *utils.Payload) {
 
 }
 
