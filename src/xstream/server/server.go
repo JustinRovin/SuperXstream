@@ -23,6 +23,10 @@ func Start(host netin.Host) {
 		log.Fatal("listen error: ", err)
 	}
 
+	//this is going to be the go routine that constantly
+	//listens for writes to the Host Gringo buffer
+	go netin.RecieveUpdates(host)
+	
 	for {
 		if conn, err := listener.Accept(); err != nil {
 			log.Println("accept error: " + err.Error())
