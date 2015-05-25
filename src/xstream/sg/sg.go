@@ -43,7 +43,8 @@ func GetOutputPayloads() [][]*utils.Payload {
 	return nil
 }
 
-func InitEdges(gringo *utils.GringoT, edgeSize int, edgeFile string) error {
+func InitEdges(gringo *utils.GringoT, edgeSize int, edgeFile string,
+	notifyChannel chan string) error {
 	outBlock := directio.AlignedBlock(directio.BlockSize)
 	outFile, err := directio.OpenFile(edgeFile,
 		os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
@@ -86,7 +87,8 @@ func InitEdges(gringo *utils.GringoT, edgeSize int, edgeFile string) error {
 	}
 
 	log.Println(diskEdgeCount, "edges written to disk ")
-
+	log.Println("Finished partitioning graph")
+	notifyChannel <- "init_done"
 	return nil
 }
 

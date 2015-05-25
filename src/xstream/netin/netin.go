@@ -31,9 +31,13 @@ type Host struct {
 	PartitionList []HostInfo
 	Connections   []*rpc.Client
 	GatherCount   int
+	NotifyChannel chan string
 }
 
 func RecieveUpdates(self *Host) error {
+	<-self.NotifyChannel
+	log.Println(self.Info.Addr, "is now waiting for gather updates")
+
 	for {
 		payload := self.Gringo.Read()
 		if payload.Size == 0 {
@@ -107,8 +111,9 @@ func CreateHost(config *Config, myPort string) Host {
 	}
 
 	conns := make([]*rpc.Client, len(hostInfos))
-
+	nc := make(chan string)
 	gringo := utils.NewGringo()
+
 	return Host{
 		Info:          myHostInfo,
 		Gringo:        gringo,
@@ -116,6 +121,7 @@ func CreateHost(config *Config, myPort string) Host {
 		PartitionList: hostInfos,
 		Connections:   conns,
 		GatherCount:   0,
+		NotifyChannel: nc,
 	}
 }
 
@@ -126,7 +132,7 @@ type StartInitEdgesArgs struct {
 
 func (self *Host) StartInitEdges(args *StartInitEdgesArgs, ack *bool) error {
 	go sg.InitEdges(self.Gringo, args.EdgeSize,
-		args.File+"-"+strconv.Itoa(self.Partition))
+		args.File+"-"+strconv.Itoa(self.Partition), self.NotifyChannel)
 
 	*ack = true
 	return nil
@@ -251,7 +257,6 @@ func PartitionGraph(self *Host, file string, includeWeights bool) error {
 		}
 	}
 
-	log.Println("Finished partitioning graph")
 	log.Println("Time elapsed:", time.Since(startTime))
 	return nil
 }

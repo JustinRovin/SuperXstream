@@ -14,8 +14,8 @@ import (
 )
 
 // For some reason this only works on the starting Goroutine
-func Start(host netin.Host) {
-	rpc.Register(&host)
+func Start(host *netin.Host) {
+	rpc.Register(host)
 
 	log.Println("Listening on", host.Info.Addr)
 	listener, err := net.Listen("tcp", host.Info.Addr)
@@ -25,8 +25,8 @@ func Start(host netin.Host) {
 
 	//this is going to be the go routine that constantly
 	//listens for writes to the Host Gringo buffer
-	//go netin.RecieveUpdates(host)
-	
+	go netin.RecieveUpdates(host)
+
 	for {
 		if conn, err := listener.Accept(); err != nil {
 			log.Println("accept error: " + err.Error())
@@ -56,26 +56,26 @@ func main() {
 	host := netin.CreateHost(&config, os.Args[2])
 
 	if host.Partition == 0 {
-		go runGraph(host)
-		Start(host)
+		go runGraph(&host)
+		Start(&host)
 	} else {
 		log.Println(host.Info.Addr, "is waiting for instructions")
-		go dialConnections(host)
-		Start(host)
+		go dialConnections(&host)
+		Start(&host)
 	}
 }
 
-func runGraph(host netin.Host) {
+func runGraph(host *netin.Host) {
 	dialConnections(host)
 	log.Println(host.Info.Addr, "is Partition 0.")
 	log.Println(host.Info.Addr, "is processing graph", os.Args[3])
-	err := netin.PartitionGraph(&host, os.Args[3], false)
+	err := netin.PartitionGraph(host, os.Args[3], false)
 	if err != nil {
 		log.Fatal("PartitionGraph: ", err)
 	}
 }
 
-func dialConnections(host netin.Host) {
+func dialConnections(host *netin.Host) {
 	runtime.Gosched()
 	for i, h := range host.PartitionList {
 		if i != int(host.Partition) {
