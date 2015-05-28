@@ -4,24 +4,26 @@ import (
 	"bytes"
 	"log"
 	"os"
+	"strconv"
 	"xstream/utils"
 
 	"github.com/ncw/directio"
 )
 
-type GraphConfig struct {
-	Graph struct {
-		Name     string
-		Type     int
-		Vertices int
-		Edges    int
-	}
+type ScatterGatherEngine interface {
+	AllocateVertices() error
+	Init(phase uint32) bool
+	Scatter(phase uint32) error
+
+	NeedsEdges() bool
 }
 
-type ScatterGatherEngine interface {
-	Init() error
-	Scatter() error
-	Gather() error
+type BaseEngine struct {
+	EdgeFile    string
+	Partition   int
+	NumVertices int
+
+	vertexOffset uint32
 }
 
 func AppendUpdate(payload *utils.Payload) {
@@ -43,8 +45,7 @@ func GetOutputPayloads() [][]*utils.Payload {
 	return nil
 }
 
-func InitEdges(gringo *utils.GringoT, edgeSize int, edgeFile string,
-	notifyChannel chan string) error {
+func InitEdges(gringo *utils.GringoT, edgeSize int, edgeFile string) error {
 	outBlock := directio.AlignedBlock(directio.BlockSize)
 	outFile, err := directio.OpenFile(edgeFile,
 		os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
@@ -88,7 +89,6 @@ func InitEdges(gringo *utils.GringoT, edgeSize int, edgeFile string,
 
 	log.Println(diskEdgeCount, "edges written to disk ")
 	log.Println("Finished partitioning graph")
-	notifyChannel <- "init_done"
 	return nil
 }
 
@@ -96,4 +96,8 @@ func padBlock(buffer *bytes.Buffer, blockSize int) {
 	for length := buffer.Len(); length < blockSize; length++ {
 		buffer.WriteByte(0)
 	}
+}
+
+func CreateFileName(edgeFile string, partition int) string {
+	return edgeFile + "-" + strconv.Itoa(partition)
 }

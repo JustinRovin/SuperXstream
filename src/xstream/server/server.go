@@ -23,12 +23,6 @@ func Start(host *netin.Host) {
 		log.Fatal("listen error: ", err)
 	}
 
-	//this is going to be the go routine that constantly
-	//listens for writes to the Host Gringo buffer
-	//it starts by waiting for a message on the
-	//host notifychannel
-	go netin.StartUpdateListener(host)
-
 	for {
 		if conn, err := listener.Accept(); err != nil {
 			log.Println("accept error: " + err.Error())
@@ -71,10 +65,12 @@ func runGraph(host *netin.Host) {
 	dialConnections(host)
 	log.Println(host.Info.Addr, "is Partition 0.")
 	log.Println(host.Info.Addr, "is processing graph", os.Args[3])
-	err := netin.PartitionGraph(host, os.Args[3], false)
+	partitionSize, err := netin.PartitionGraph(host, os.Args[3], false)
 	if err != nil {
 		log.Fatal("PartitionGraph: ", err)
 	}
+
+	netin.CreateHostEngines(host, os.Args[3], partitionSize)
 }
 
 func dialConnections(host *netin.Host) {

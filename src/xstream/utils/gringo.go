@@ -12,7 +12,7 @@ import (
 const queueSize uint64 = 4096
 const indexMask uint64 = queueSize - 1
 
-const MAX_PAYLOAD_SIZE int = 4096
+const MAX_PAYLOAD_SIZE int = 25600
 
 type Payload struct {
 	Size       int
