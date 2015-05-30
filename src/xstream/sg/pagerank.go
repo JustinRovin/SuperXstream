@@ -66,7 +66,7 @@ func (self *PREngine) ForEachEdge(f func(*PREngine, uint32, uint32,
 			src = *(*uint32)(unsafe.Pointer(&inBlock[i]))
 			dest = *(*uint32)(unsafe.Pointer(&inBlock[i+4]))
 
-			if src > 0 || dest > 0 { // ignoring the padding bytes
+			if (src > 0 || dest > 0) && src != dest { // ignoring the padding bytes
 				f(self, src, dest, buffers)
 			}
 		}
@@ -119,7 +119,8 @@ func (self *PREngine) Gather(phase uint32, gringo *utils.GringoT,
 	self.Iterations--
 
 	//this sets up each vert for summing a new ranking
-	for _, v := range self.vertices {
+	for i := range self.vertices {
+		v := &self.vertices[i]
 		v.rank = 0
 	}
 
@@ -151,8 +152,13 @@ func (self *PREngine) Gather(phase uint32, gringo *utils.GringoT,
 	//multiplies the dampingFactor with the contributions
 	//to get the final rank
 	perVertDamp := float32((1.0 - dampingFactor) / float32(self.Base.TotVertices))
-	for _, v := range self.vertices {
+	for i := range self.vertices {
+		v := &self.vertices[i]
+
 		v.rank = perVertDamp + (dampingFactor * v.rank)
+		if v.degree > 0 {
+			v.contribution = float32(v.rank) / float32(v.degree)
+		}
 	}
 
 	if self.Iterations > 0 {
