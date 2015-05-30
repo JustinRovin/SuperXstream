@@ -30,7 +30,7 @@ func SendUpdatesToHosts(self *Host) error {
 		}
 	}
 
-	for range self.PartitionList {
+	for i := 0; i < len(self.PartitionList); i++ {
 		<-done
 	}
 
@@ -95,7 +95,7 @@ func RunAlgorithm(self *Host, file string, partitionSize int) error {
 			}
 		}
 
-		for range self.PartitionList {
+		for i := 0; i < len(self.PartitionList); i++ {
 			<-done
 		}
 
