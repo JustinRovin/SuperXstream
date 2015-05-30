@@ -1,15 +1,5 @@
 package sg
 
-import (
-	"io"
-	"log"
-	"math"
-	"os"
-	"unsafe"
-
-	"github.com/ncw/directio"
-)
-
 type prVertexT struct {
 	degree uint32
 	rank   float32
@@ -27,4 +17,5 @@ type PREngine struct {
 
 func (self *PREngine) Scatter(phase uint32) error {
 	//Unpack parameters
+	return nil
 }

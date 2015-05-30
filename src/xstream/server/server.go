@@ -70,7 +70,7 @@ func runGraph(host *netin.Host) {
 		log.Fatal("PartitionGraph: ", err)
 	}
 
-	netin.CreateHostEngines(host, os.Args[3], partitionSize)
+	netin.RunAlgorithm(host, os.Args[3], partitionSize)
 }
 
 func dialConnections(host *netin.Host) {

@@ -1,6 +1,7 @@
 package netin
 
 import (
+	"bytes"
 	"net/rpc"
 	"xstream/sg"
 	"xstream/utils"
@@ -17,6 +18,7 @@ type HostInfo struct {
 
 type Host struct {
 	Info          HostInfo
+	Buffers       []bytes.Buffer
 	Gringo        *utils.GringoT
 	Partition     int
 	PartitionList []HostInfo
@@ -36,11 +38,17 @@ func CreateHost(config *Config, myPort string) Host {
 		}
 	}
 
+	buffers := make([]bytes.Buffer, len(hostInfos))
+	for i, _ := range hostInfos {
+		buffers[i] = bytes.Buffer{}
+	}
+
 	conns := make([]*rpc.Client, len(hostInfos))
 	gringo := utils.NewGringo()
 
 	return Host{
 		Info:          myHostInfo,
+		Buffers:       buffers,
 		Gringo:        gringo,
 		Partition:     myPartitionIndex,
 		PartitionList: hostInfos,
