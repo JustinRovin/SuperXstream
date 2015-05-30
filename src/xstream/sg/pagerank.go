@@ -113,7 +113,7 @@ func (self *PREngine) Scatter(phase uint32, buffers []bytes.Buffer) error {
 	return nil
 }
 
-func (self *PREngine) Gather(phase uint32, gringo *utils.GringoT,
+func (self *PREngine) Gather(phase uint32, channel chan utils.Payload,
 	numPartitions int) bool {
 	self.proceed = false
 	self.Iterations--
@@ -132,7 +132,7 @@ func (self *PREngine) Gather(phase uint32, gringo *utils.GringoT,
 	doneMarkers := 0
 
 	for {
-		payload = gringo.Read()
+		payload = <-channel
 		if payload.Size == 0 {
 			doneMarkers++
 			if doneMarkers == numPartitions {

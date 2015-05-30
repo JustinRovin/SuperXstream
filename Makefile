@@ -5,11 +5,11 @@ SHELL := /bin/sh
 all: common server
 
 server: common
-	go install xstream/server
+	go install -race xstream/server
 
 common: deps
 	go fmt xstream/netin xstream/server xstream/sg xstream/utils
-	go build xstream/netin xstream/sg xstream/utils
+	go build -race xstream/netin xstream/sg xstream/utils
 
 deps:
 	go get github.com/ncw/directio

@@ -30,7 +30,7 @@ type StartInitEdgesArgs struct {
 }
 
 func (self *Host) StartInitEdges(args *StartInitEdgesArgs, ack *bool) error {
-	go sg.InitEdges(self.Gringo, args.EdgeSize,
+	go sg.InitEdges(self.Channel, args.EdgeSize,
 		sg.CreateFileName(args.File, self.Partition))
 
 	*ack = true
@@ -38,7 +38,7 @@ func (self *Host) StartInitEdges(args *StartInitEdgesArgs, ack *bool) error {
 }
 
 func (self *Host) AppendEdges(payload *utils.Payload, ack *bool) error {
-	self.Gringo.Write(*payload)
+	self.Channel <- *payload
 	*ack = true
 	return nil
 }

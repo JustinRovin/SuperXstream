@@ -90,7 +90,7 @@ func (self *BFSEngine) Scatter(phase uint32, buffers []bytes.Buffer) error {
 	return nil
 }
 
-func (self *BFSEngine) Gather(phase uint32, gringo *utils.GringoT,
+func (self *BFSEngine) Gather(phase uint32, channel chan utils.Payload,
 	numPartitions int) bool {
 	doneMarkers := 0
 
@@ -103,7 +103,7 @@ func (self *BFSEngine) Gather(phase uint32, gringo *utils.GringoT,
 	self.proceed = false
 
 	for {
-		payload = gringo.Read()
+		payload = <-channel
 		if payload.Size == 0 {
 			doneMarkers++
 			if doneMarkers == numPartitions {

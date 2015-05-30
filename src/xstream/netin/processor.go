@@ -17,8 +17,8 @@ type GetVerticesResult struct {
 func SendUpdatesToHosts(self *Host) error {
 	done := make(chan *rpc.Call, len(self.PartitionList))
 
+	var ack bool
 	for i, buffer := range self.Buffers {
-		var ack bool
 		if i == self.Partition {
 			go func(buffer []byte) {
 				self.SendUpdates(buffer, &ack)
@@ -50,13 +50,12 @@ func (self *Host) SendUpdates(buffer []byte, ack *bool) error {
 	for i := 0; i < length; i += utils.MAX_PAYLOAD_SIZE {
 		bytesRead, _ = reader.Read(payload.Bytes[:])
 		payload.Size = bytesRead
-		self.Gringo.Write(payload)
+		self.Channel <- payload
 	}
 
 	payload.Size = 0
-	self.Gringo.Write(payload)
+	self.Channel <- payload
 
-	*ack = true
 	return nil
 }
 
@@ -145,7 +144,7 @@ func (self *Host) RunPhase(phase uint32, proceed *bool) error {
 	self.Info.Engine.Init(phase)
 	self.Info.Engine.Scatter(phase, self.Buffers)
 	go SendUpdatesToHosts(self)
-	*proceed = self.Info.Engine.Gather(phase+1, self.Gringo,
+	*proceed = self.Info.Engine.Gather(phase+1, self.Channel,
 		len(self.PartitionList))
 
 	return nil
