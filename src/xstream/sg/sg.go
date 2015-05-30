@@ -22,6 +22,7 @@ type BaseEngine struct {
 	EdgeFile    string
 	Partition   int
 	NumVertices int
+	TotVertices int
 
 	vertexOffset uint32
 }

@@ -76,8 +76,7 @@ func (self *PREngine) ForEachEdge(f func(*PREngine, uint32, uint32,
 }
 
 func AddEdgeUpdate(self *PREngine, src uint32, dest uint32, buffers []bytes.Buffer) {
-	var partition32 uint32 = uint32(self.Base.NumVertices)
-	var destPartition uint32 = dest / partition32
+	var destPartition uint32 = dest / uint32(self.Base.NumVertices)
 	var cont float32 = self.vertices[src-self.Base.vertexOffset].contribution
 
 	//log.Println(cont, " -> ", dest)
@@ -151,7 +150,7 @@ func (self *PREngine) Gather(phase uint32, gringo *utils.GringoT,
 	//this part adds the demping Factor per vertex constant, and
 	//multiplies the dampingFactor with the contributions
 	//to get the final rank
-	perVertDamp := float32((1.0 - dampingFactor) / float32(self.Base.NumVertices))
+	perVertDamp := float32((1.0 - dampingFactor) / float32(self.Base.TotVertices))
 	for _, v := range self.vertices {
 		v.rank = perVertDamp + (dampingFactor * v.rank)
 	}
@@ -166,8 +165,8 @@ func (self *PREngine) Gather(phase uint32, gringo *utils.GringoT,
 func (self *PREngine) Init(phase uint32) error {
 	log.Println("phase: ", phase)
 	if phase == 0 {
-		var startRank float32 = float32(1) / float32(self.Base.NumVertices)
-		log.Println("num verts: ", self.Base.NumVertices)
+		var startRank float32 = float32(1) / float32(self.Base.TotVertices)
+		log.Println("num verts: ", self.Base.TotVertices)
 		log.Println("start Rank: ", startRank)
 
 		for i := range self.vertices {

@@ -65,6 +65,7 @@ func RunAlgorithm(self *Host, file string, partitionSize int) error {
 		EdgeFile:    file,
 		Partition:   0,
 		NumVertices: partitionSize,
+		TotVertices: len(self.PartitionList) * partitionSize,
 	}
 
 	startTime := time.Now()
@@ -116,7 +117,7 @@ func RunAlgorithm(self *Host, file string, partitionSize int) error {
 			self.GetVertices(0, &vertices)
 			outputFile.Write(vertices.Data)
 		} else {
-			conn.Call("Host.GetVertices", 0, &vertices)
+			conn.Call("Host.GetVertices", 1, &vertices)
 			outputFile.Write(vertices.Data)
 		}
 	}
@@ -131,7 +132,7 @@ func (self *Host) CreateEngine(base *sg.BaseEngine, ack *bool) error {
 	case "bfs":
 		self.Info.Engine = &sg.BFSEngine{Base: *base}
 	case "pagerank":
-		self.Info.Engine = &sg.PREngine{Base: *base, Iterations: 5}
+		self.Info.Engine = &sg.PREngine{Base: *base, Iterations: 1}
 	}
 
 	self.Info.Engine.AllocateVertices()
