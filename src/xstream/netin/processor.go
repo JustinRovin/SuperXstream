@@ -1,65 +1,67 @@
 package netin
 
 import (
+	"bytes"
+	"log"
+	"net/rpc"
+	"time"
 	"xstream/sg"
 	"xstream/utils"
 )
 
-// func IncrementGatherCount(self *Host) error {
-// 	self.GatherCount++
+func SendUpdatesToHosts(self *Host) error {
+	done := make(chan *rpc.Call, len(self.PartitionList))
 
-// 	if self.GatherCount == len(self.PartitionList) {
-// 		self.GatherCount = 0
-
-// 		//Im thinking we could either call this here, or it could just be called
-// 		//implicitly in getOutputPayloads?? what do you think?
-// 		//Having this abstracted away from get output payloads could be nice actually,
-// 		//because then we could switch up the different algorithms we run on the graph
-// 		//pretty easily
-// 		sg.ProcessUpdates()
-
-// 		//Im thinking this function "getOutputPayloads" could return a 2d array of payloads
-// 		//where the list of update payloads to route will be at the index of the
-// 		//partition number it should go to (obviously), then the last payload in that
-// 		//list will be of size 0. Then in sendUpdates Ill just blindly send off all the
-// 		//payloads
-// 		payloads := sg.GetOutputPayloads()
-// 		go SendUpdates(self, payloads)
-// 	}
-
-// 	return nil
-// }
-
-func SendUpdates(self *Host, payloadLists [][]*utils.Payload) error {
-	for i, pList := range payloadLists {
+	for i, buffer := range self.Buffers {
 		var ack bool
 		if i == self.Partition {
-			for _, p := range pList {
-				self.PushUpdate(p, &ack)
-			}
+			go func() {
+				self.SendUpdates(buffer.Bytes(), &ack)
+				done <- nil
+			}()
 		} else {
-			for p := range pList {
-				self.Connections[i].Call("PushUpdate", p, &ack)
-			}
+			self.Connections[i].Go("SendUpdates", buffer.Bytes(), &ack, done)
 		}
+	}
+
+	for range self.PartitionList {
+		<-done
+	}
+
+	for _, buffer := range self.Buffers {
+		buffer.Reset()
 	}
 
 	return nil
 }
 
-func (self *Host) PushUpdate(payload *utils.Payload, ack *bool) error {
-	self.Gringo.Write(*payload)
+func (self *Host) SendUpdates(buffer []byte, ack *bool) error {
+	reader := bytes.NewReader(buffer)
+	length := reader.Len()
+
+	payload := utils.Payload{Size: 0, ObjectSize: 8}
+	bytesRead := 0
+	for i := 0; i < length; i += utils.MAX_PAYLOAD_SIZE {
+		bytesRead, _ = reader.Read(payload.Bytes[:])
+		payload.Size = bytesRead / 8
+		self.Gringo.Write(payload)
+	}
+
+	payload.Size = 0
+	self.Gringo.Write(payload)
 
 	*ack = true
 	return nil
 }
 
-func CreateHostEngines(self *Host, file string, partitionSize int) error {
+func RunAlgorithm(self *Host, file string, partitionSize int) error {
 	base := &sg.BaseEngine{
 		EdgeFile:    file,
 		Partition:   0,
 		NumVertices: partitionSize,
 	}
+
+	startTime := time.Now()
 
 	var ack bool
 	for i, conn := range self.Connections {
@@ -71,24 +73,48 @@ func CreateHostEngines(self *Host, file string, partitionSize int) error {
 		}
 	}
 
+	done := make(chan *rpc.Call, len(self.PartitionList))
+	phase := uint32(0)
+	for proceed := true; proceed == true; {
+		proceed = false
+
+		for i, conn := range self.Connections {
+			if i == self.Partition {
+				go func() {
+					self.RunPhase(phase, &proceed)
+					done <- nil
+				}()
+			} else {
+				conn.Go("Host.RunPhase", phase, &proceed, done)
+			}
+		}
+
+		for range self.PartitionList {
+			<-done
+		}
+
+		phase++
+	}
+
+	log.Println("Phases Run:", phase)
+	log.Println("Time elapsed:", time.Since(startTime))
 	return nil
 }
 
 func (self *Host) CreateEngine(base *sg.BaseEngine, ack *bool) error {
 	self.Info.Engine = &sg.BFSEngine{Base: *base}
 	self.Info.Engine.AllocateVertices()
-	// log.Println("Creating Engine", self.Info.Engine)
+
 	*ack = true
 	return nil
 }
 
-func CallPhase(self *Host, phase uint32) error {
-	return nil
-}
-
-func (self *Host) RunPhase(phase *uint32, ack *bool) error {
-	if self.Info.Engine.Init(*phase) {
-	}
+func (self *Host) RunPhase(phase uint32, proceed *bool) error {
+	self.Info.Engine.Init(phase)
+	self.Info.Engine.Scatter(phase, self.Buffers)
+	go SendUpdatesToHosts(self)
+	*proceed = self.Info.Engine.Gather(phase+1, self.Gringo,
+		len(self.PartitionList))
 
 	return nil
 }
