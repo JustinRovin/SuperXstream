@@ -13,6 +13,7 @@ type Config struct {
 	Hosts   []string
 	Procs   int
 	Logging string
+	Engine  string
 }
 
 func LoadConfig(filename string) (config Config) {

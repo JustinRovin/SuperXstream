@@ -126,7 +126,14 @@ func RunAlgorithm(self *Host, file string, partitionSize int) error {
 }
 
 func (self *Host) CreateEngine(base *sg.BaseEngine, ack *bool) error {
-	self.Info.Engine = &sg.BFSEngine{Base: *base}
+	//put switch here?
+	switch self.EngineType {
+	case "bfs":
+		self.Info.Engine = &sg.BFSEngine{Base: *base}
+	case "pagerank":
+		self.Info.Engine = &sg.PREngine{Base: *base}
+	}
+
 	self.Info.Engine.AllocateVertices()
 
 	*ack = true

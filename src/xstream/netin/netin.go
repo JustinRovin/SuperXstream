@@ -23,6 +23,7 @@ type Host struct {
 	Partition     int
 	PartitionList []HostInfo
 	Connections   []*rpc.Client
+	EngineType    string
 }
 
 func CreateHost(config *Config, myPort string) Host {
@@ -53,5 +54,6 @@ func CreateHost(config *Config, myPort string) Host {
 		Partition:     myPartitionIndex,
 		PartitionList: hostInfos,
 		Connections:   conns,
+		EngineType:    config.Engine,
 	}
 }

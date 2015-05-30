@@ -4,5 +4,6 @@
     "localhost:8091"
   ],
   "Procs": 2,
-  "Logging": "enable"
+  "Logging": "enable",
+  "Engine":"pagerank"
 }
