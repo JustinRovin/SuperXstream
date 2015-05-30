@@ -15,6 +15,7 @@ type ScatterGatherEngine interface {
 	Init(phase uint32) error
 	Scatter(phase uint32, buffers []bytes.Buffer) error
 	Gather(phase uint32, gringo *utils.GringoT, numPartitions int) bool
+	GetVertices() []byte
 }
 
 type BaseEngine struct {

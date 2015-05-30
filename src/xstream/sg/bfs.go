@@ -2,6 +2,7 @@ package sg
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
 	"log"
 	"math"
@@ -18,8 +19,8 @@ type bfsVertexT struct {
 }
 
 type bfsUpdateT struct {
-	parent uint32
-	child  uint32
+	Parent uint32
+	Child  uint32
 }
 
 type BFSEngine struct {
@@ -30,16 +31,24 @@ type BFSEngine struct {
 }
 
 func (self *BFSEngine) AllocateVertices() error {
-	log.Println("vertexoffset", self.Base.vertexOffset)
 	self.Base.vertexOffset = uint32(self.Base.Partition * self.Base.NumVertices)
 	self.vertices = make([]bfsVertexT, self.Base.NumVertices)
 
 	return nil
 }
 
+func (self *BFSEngine) GetVertices() []byte {
+	buffer := new(bytes.Buffer)
+
+	for _, vertex := range self.vertices {
+		binary.Write(buffer, binary.LittleEndian, vertex)
+	}
+
+	return buffer.Bytes()
+}
+
 func (self *BFSEngine) Scatter(phase uint32, buffers []bytes.Buffer) error {
 	if !self.proceed || (phase == 0 && self.Base.Partition > 0) {
-		log.Println("Skipping phase", phase)
 		return nil
 	}
 
@@ -50,9 +59,6 @@ func (self *BFSEngine) Scatter(phase uint32, buffers []bytes.Buffer) error {
 		log.Fatal(err)
 	}
 	defer inFile.Close()
-
-	edgesRead := 0
-	updatesCreated := 0
 
 	var partition32 uint32 = uint32(self.Base.NumVertices) // freakin Go
 	var i, x, numBytes int
@@ -71,26 +77,15 @@ func (self *BFSEngine) Scatter(phase uint32, buffers []bytes.Buffer) error {
 			src = *(*uint32)(unsafe.Pointer(&inBlock[i]))
 			dest = *(*uint32)(unsafe.Pointer(&inBlock[i+4]))
 
-			if src > 0 && dest > 0 { // ignoring the padding bytes
-				edgesRead++
-				log.Println("Edge", src, dest)
-
+			if src > 0 || dest > 0 { // ignoring the padding bytes
 				vertex = &self.vertices[src-self.Base.vertexOffset]
 				if vertex.parent != math.MaxUint32 && vertex.phase == phase {
 					destPartition = dest / partition32
-					_ = destPartition
-					// Create update
 					buffers[destPartition].Write(inBlock[i : i+8])
-
-					updatesCreated++
 				}
 			}
 		}
 	}
-
-	log.Println("Phase", phase)
-	log.Println("EdgesRead", edgesRead)
-	log.Println("UpdatesCreated", updatesCreated)
 
 	return nil
 }
@@ -98,8 +93,6 @@ func (self *BFSEngine) Scatter(phase uint32, buffers []bytes.Buffer) error {
 func (self *BFSEngine) Gather(phase uint32, gringo *utils.GringoT,
 	numPartitions int) bool {
 	doneMarkers := 0
-	updatesRead := 0
-	updatesApplied := 0
 
 	var payload utils.Payload
 	var i int
@@ -123,22 +116,16 @@ func (self *BFSEngine) Gather(phase uint32, gringo *utils.GringoT,
 			child = *(*uint32)(unsafe.Pointer(&payload.Bytes[i+4]))
 			vertex = &self.vertices[child-self.Base.vertexOffset]
 
-			updatesRead++
-
 			if vertex.parent == math.MaxUint32 {
 				vertex.parent = parent
 				vertex.phase = phase
 				if !self.proceed {
 					self.proceed = true
 				}
-
-				updatesApplied++
 			}
 		}
 	}
 
-	log.Println("UpdatesRead", updatesRead)
-	log.Println("UpdatesApplied", updatesApplied)
 	return self.proceed
 }
 
