@@ -3,6 +3,7 @@ package sg
 import (
 	"bytes"
 	"encoding/binary"
+//	"fmt"
 	"io"
 	"log"
 	"math"
@@ -78,6 +79,7 @@ func AddEdgeUpdate(self *PREngine, src uint32, dest uint32, buffers []bytes.Buff
 	var destPartition uint32 = dest / partition32
 	var cont float32 = self.vertices[src-self.Base.vertexOffset].contribution
 
+	//log.Println(cont, " -> ", dest)
 	//here "target" (the destination vert) is written
 	//then contribution is written (Need to make sure
 	//that the buffer is reading out the correct number
@@ -156,10 +158,14 @@ func (self *PREngine) Gather(phase uint32, gringo *utils.GringoT,
 }
 
 func (self *PREngine) Init(phase uint32) error {
+	log.Println("phase: ", phase)
 	if phase == 0 {
-		var startRank float32 = float32(1 / self.Base.NumVertices)
+		var startRank float32 = float32(1) / float32(self.Base.NumVertices)
+		log.Println("num verts: ", self.Base.NumVertices)
+		log.Println("start Rank: ", startRank)
 
-		for _, v := range self.vertices {
+		for i := range self.vertices {
+			v := &self.vertices[i]
 			v.degree = 0
 			v.rank = startRank
 			v.contribution = 0
@@ -167,8 +173,14 @@ func (self *PREngine) Init(phase uint32) error {
 
 		self.ForEachEdge(InitVert, nil)
 
-		for _, v := range self.vertices {
-			v.contribution = v.rank / float32(v.degree)
+		for i := range self.vertices {
+			v := &self.vertices[i]
+
+			if v.degree > 0 {
+				v.contribution = float32(v.rank) / float32(v.degree)
+			}
+
+			//fmt.Printf("cont %f , rank %f \n", v.contribution, v.rank)
 		}
 
 		self.proceed = true
