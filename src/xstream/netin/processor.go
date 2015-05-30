@@ -131,7 +131,7 @@ func (self *Host) CreateEngine(base *sg.BaseEngine, ack *bool) error {
 	case "bfs":
 		self.Info.Engine = &sg.BFSEngine{Base: *base}
 	case "pagerank":
-		self.Info.Engine = &sg.PREngine{Base: *base}
+		self.Info.Engine = &sg.PREngine{Base: *base, Iterations: 5}
 	}
 
 	self.Info.Engine.AllocateVertices()

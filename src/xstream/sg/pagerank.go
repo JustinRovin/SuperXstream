@@ -28,7 +28,8 @@ type prUpdateT struct {
 }
 
 type PREngine struct {
-	Base BaseEngine
+	Base       BaseEngine
+	Iterations uint32
 
 	vertices []prVertexT
 	proceed  bool
@@ -116,6 +117,7 @@ func (self *PREngine) Scatter(phase uint32, buffers []bytes.Buffer) error {
 func (self *PREngine) Gather(phase uint32, gringo *utils.GringoT,
 	numPartitions int) bool {
 	self.proceed = false
+	self.Iterations--
 
 	//this sets up each vert for summing a new ranking
 	for _, v := range self.vertices {
@@ -152,6 +154,10 @@ func (self *PREngine) Gather(phase uint32, gringo *utils.GringoT,
 	perVertDamp := float32((1.0 - dampingFactor) / float32(self.Base.NumVertices))
 	for _, v := range self.vertices {
 		v.rank = perVertDamp + (dampingFactor * v.rank)
+	}
+
+	if self.Iterations > 0 {
+		self.proceed = true
 	}
 
 	return self.proceed
