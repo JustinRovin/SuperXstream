@@ -141,7 +141,6 @@ func PartitionGraph(self *Host, file string, includeWeights bool) (int, error) {
 		payload = payloads[i]
 		var ack bool
 
-		// log.Println("Sending payload size", payload.Size)
 		if i == self.Partition {
 			self.AppendEdges(payload, &ack)
 			payload.Size = 0

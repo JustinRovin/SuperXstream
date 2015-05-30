@@ -4,10 +4,15 @@ import (
 	"bytes"
 	"log"
 	"net/rpc"
+	"os"
 	"time"
 	"xstream/sg"
 	"xstream/utils"
 )
+
+type GetVerticesResult struct {
+	Data []byte
+}
 
 func SendUpdatesToHosts(self *Host) error {
 	done := make(chan *rpc.Call, len(self.PartitionList))
@@ -15,12 +20,13 @@ func SendUpdatesToHosts(self *Host) error {
 	for i, buffer := range self.Buffers {
 		var ack bool
 		if i == self.Partition {
-			go func() {
-				self.SendUpdates(buffer.Bytes(), &ack)
+			go func(buffer []byte) {
+				self.SendUpdates(buffer, &ack)
 				done <- nil
-			}()
+			}(buffer.Bytes())
 		} else {
-			self.Connections[i].Go("SendUpdates", buffer.Bytes(), &ack, done)
+			self.Connections[i].Go("Host.SendUpdates", buffer.Bytes(), &ack,
+				done)
 		}
 	}
 
@@ -43,7 +49,7 @@ func (self *Host) SendUpdates(buffer []byte, ack *bool) error {
 	bytesRead := 0
 	for i := 0; i < length; i += utils.MAX_PAYLOAD_SIZE {
 		bytesRead, _ = reader.Read(payload.Bytes[:])
-		payload.Size = bytesRead / 8
+		payload.Size = bytesRead
 		self.Gringo.Write(payload)
 	}
 
@@ -98,6 +104,24 @@ func RunAlgorithm(self *Host, file string, partitionSize int) error {
 
 	log.Println("Phases Run:", phase)
 	log.Println("Time elapsed:", time.Since(startTime))
+
+	log.Println("Retrieving Vertices")
+	startTime = time.Now()
+
+	outputFile, _ := os.Create("vertices")
+	defer outputFile.Close()
+	var vertices GetVerticesResult
+	for i, conn := range self.Connections {
+		if i == self.Partition {
+			self.GetVertices(0, &vertices)
+			outputFile.Write(vertices.Data)
+		} else {
+			conn.Call("Host.GetVertices", 0, &vertices)
+			outputFile.Write(vertices.Data)
+		}
+	}
+
+	log.Println("Time elapsed:", time.Since(startTime))
 	return nil
 }
 
@@ -116,5 +140,10 @@ func (self *Host) RunPhase(phase uint32, proceed *bool) error {
 	*proceed = self.Info.Engine.Gather(phase+1, self.Gringo,
 		len(self.PartitionList))
 
+	return nil
+}
+
+func (self *Host) GetVertices(_ int, vertices *GetVerticesResult) error {
+	*vertices = GetVerticesResult{Data: self.Info.Engine.GetVertices()}
 	return nil
 }
