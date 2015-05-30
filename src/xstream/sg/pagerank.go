@@ -165,7 +165,7 @@ func (self *PREngine) Gather(phase uint32, gringo *utils.GringoT,
 func (self *PREngine) Init(phase uint32) error {
 	log.Println("phase: ", phase)
 	if phase == 0 {
-		var startRank float32 = float32(1) / float32(self.Base.TotVertices)
+		var startRank float32 = float32(100) / float32(self.Base.TotVertices)
 		log.Println("num verts: ", self.Base.TotVertices)
 		log.Println("start Rank: ", startRank)
 
