@@ -9,10 +9,10 @@ import (
 // Maybe change runtime.Gosched() to busy loop?
 
 // The queue
-const queueSize uint64 = 4096
+const queueSize uint64 = 128
 const indexMask uint64 = queueSize - 1
 
-const MAX_PAYLOAD_SIZE int = 25600
+const MAX_PAYLOAD_SIZE int = 1048576
 
 type Payload struct {
 	Size       int
