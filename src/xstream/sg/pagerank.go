@@ -3,7 +3,7 @@ package sg
 import (
 	"bytes"
 	"encoding/binary"
-//	"fmt"
+	//	"fmt"
 	"io"
 	"log"
 	"math"
@@ -84,7 +84,7 @@ func AddEdgeUpdate(self *PREngine, src uint32, dest uint32, buffers []bytes.Buff
 	//then contribution is written (Need to make sure
 	//that the buffer is reading out the correct number
 	//of bytes when recieved
-	buffer := buffers[destPartition]
+	buffer := &buffers[destPartition]
 
 	buffer.Write(Uint32bytes(dest))
 	buffer.Write(Float32bytes(cont))
