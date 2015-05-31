@@ -93,7 +93,7 @@ func (self *Host) CreateEngine(base *sg.BaseEngine, ack *bool) error {
 	case "pagerank":
 		self.Info.Engine = &sg.PREngine{Base: *base, Iterations: base.Iterations + 1}
 		log.Println("iteraions", base.Iterations)
-		//iteration number is desired# + 2. one for the backwards x-stream gather-scatter cycle and one for setting up the rank?
+		//need to increase iteration count for setting up the degrees
 	}
 
 	self.Info.Engine.AllocateVertices()
