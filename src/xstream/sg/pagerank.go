@@ -3,10 +3,10 @@ package sg
 import (
 	"bytes"
 	"encoding/binary"
+	"math"
 	//	"fmt"
 	"io"
 	"log"
-	"math"
 	"os"
 	"unsafe"
 	"xstream/utils"
@@ -23,8 +23,8 @@ type prVertexT struct {
 }
 
 type prUpdateT struct {
-	target       uint32
-	contribution float32
+	Target uint32
+	Rank   float32
 }
 
 type PREngine struct {
@@ -32,7 +32,6 @@ type PREngine struct {
 	Iterations uint32
 
 	vertices []prVertexT
-	proceed  bool
 }
 
 func (self *PREngine) AllocateVertices() error {
@@ -40,58 +39,6 @@ func (self *PREngine) AllocateVertices() error {
 	self.vertices = make([]prVertexT, self.Base.NumVertices)
 
 	return nil
-}
-
-func (self *PREngine) ForEachEdge(f func(*PREngine, uint32, uint32,
-	[]bytes.Buffer), buffers []bytes.Buffer) error {
-	filename := CreateFileName(self.Base.EdgeFile, self.Base.Partition)
-	inBlock := directio.AlignedBlock(directio.BlockSize * 3)
-	inFile, err := directio.OpenFile(filename, os.O_RDONLY, 0666)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer inFile.Close()
-
-	var i, x, numBytes int
-	var src, dest uint32
-	for err != io.EOF && err != io.ErrUnexpectedEOF {
-		numBytes = 0
-		for i = 0; i < 3; i++ {
-			x, err = io.ReadFull(inFile,
-				inBlock[i*directio.BlockSize:(i+1)*directio.BlockSize])
-			numBytes += x
-		}
-
-		for i := 0; i < numBytes; i += 8 {
-			src = *(*uint32)(unsafe.Pointer(&inBlock[i]))
-			dest = *(*uint32)(unsafe.Pointer(&inBlock[i+4]))
-
-			if (src > 0 || dest > 0) && src != dest { // ignoring the padding bytes
-				f(self, src, dest, buffers)
-			}
-		}
-	}
-
-	return nil
-}
-
-func AddEdgeUpdate(self *PREngine, src uint32, dest uint32, buffers []bytes.Buffer) {
-	var destPartition uint32 = dest / uint32(self.Base.NumVertices)
-	var cont float32 = self.vertices[src-self.Base.vertexOffset].contribution
-
-	//log.Println(cont, " -> ", dest)
-	//here "target" (the destination vert) is written
-	//then contribution is written (Need to make sure
-	//that the buffer is reading out the correct number
-	//of bytes when recieved
-	buffer := &buffers[destPartition]
-
-	buffer.Write(Uint32bytes(dest))
-	buffer.Write(Float32bytes(cont))
-}
-
-func InitVert(self *PREngine, src uint32, dest uint32, buffers []bytes.Buffer) {
-	self.vertices[src-self.Base.vertexOffset].degree++
 }
 
 func (self *PREngine) GetVertices() []byte {
@@ -105,35 +52,88 @@ func (self *PREngine) GetVertices() []byte {
 }
 
 func (self *PREngine) Scatter(phase uint32, buffers []bytes.Buffer) error {
-	if !self.proceed {
-		return nil
+	filename := CreateFileName(self.Base.EdgeFile, self.Base.Partition)
+	inBlock := directio.AlignedBlock(directio.BlockSize * 3)
+	inFile, err := directio.OpenFile(filename, os.O_RDONLY, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer inFile.Close()
+
+	var v *prVertexT
+	var i, x, numBytes int
+	var src, dest, tmp uint32
+
+	var b [4]byte
+
+	for err != io.EOF && err != io.ErrUnexpectedEOF {
+		numBytes = 0
+		for i = 0; i < 3; i++ {
+			x, err = io.ReadFull(inFile,
+				inBlock[i*directio.BlockSize:(i+1)*directio.BlockSize])
+			numBytes += x
+		}
+
+		for i := 0; i < numBytes; i += 8 {
+			src = *(*uint32)(unsafe.Pointer(&inBlock[i]))
+			dest = *(*uint32)(unsafe.Pointer(&inBlock[i+4]))
+
+			if src == math.MaxUint32 && dest == math.MaxUint32 {
+				return nil
+			}
+
+			v = &self.vertices[src-self.Base.vertexOffset]
+
+			if phase == 0 {
+				v.degree++
+			} else {
+				var destPartition uint32 = dest / uint32(self.Base.NumVertices)
+				var rank float32
+				if phase == 1 {
+					rank = 1.0 / float32(v.degree)
+				} else {
+					rank = v.rank / float32(v.degree)
+				}
+
+				_ = destPartition
+				_ = rank
+
+				buffers[destPartition].Write(inBlock[i+4 : i+8])
+				tmp = *(*uint32)(unsafe.Pointer(&rank))
+				b[0] = byte(tmp)
+				b[1] = byte(tmp >> 8)
+				b[2] = byte(tmp >> 16)
+				b[3] = byte(tmp >> 24)
+				buffers[destPartition].Write(b[:])
+			}
+		}
 	}
 
-	self.ForEachEdge(AddEdgeUpdate, buffers)
 	return nil
 }
 
 func (self *PREngine) Gather(phase uint32, queue *utils.ScFifo,
-	numPartitions int) bool {
-	self.proceed = false
-	self.Iterations--
-
-	//this sets up each vert for summing a new ranking
-	for i := range self.vertices {
-		v := &self.vertices[i]
-		v.rank = 0
-	}
-
+	numPartitions int) error {
 	//this part adds all of the incoming contributions to the
 	//destination(target) vertex
+
+	if phase == 0 || phase == 1 {
+		self.Base.Proceed = true
+		return nil
+	}
+
 	var payload utils.Payload
+	var vertex *prVertexT
 	var target uint32
-	var contribution float32
+	var rank float32
 	var i int
 	doneMarkers := 0
 
 	for {
 		payload, _ = queue.Dequeue()
+		if payload.Size != 0 {
+			log.Println("Received payload size", payload.Size)
+		}
 		if payload.Size == -1 {
 			doneMarkers++
 			if doneMarkers == numPartitions {
@@ -143,78 +143,43 @@ func (self *PREngine) Gather(phase uint32, queue *utils.ScFifo,
 
 		for i = 0; i < payload.Size; i += payload.ObjectSize {
 			target = *(*uint32)(unsafe.Pointer(&payload.Bytes[i]))
-			contribution = *(*float32)(unsafe.Pointer(&payload.Bytes[i+4]))
-			self.vertices[target-self.Base.vertexOffset].rank += contribution
+			rank = *(*float32)(unsafe.Pointer(&payload.Bytes[i+4]))
+
+			vertex = &self.vertices[target-self.Base.vertexOffset]
+			vertex.contribution += rank
+			vertex.rank = 1 - dampingFactor + dampingFactor*vertex.contribution
 		}
 	}
 
-	//this part adds the demping Factor per vertex constant, and
-	//multiplies the dampingFactor with the contributions
-	//to get the final rank
-	perVertDamp := float32((1.0 - dampingFactor) / float32(self.Base.TotVertices))
-	for i := range self.vertices {
-		v := &self.vertices[i]
-
-		v.rank = perVertDamp + (dampingFactor * v.rank)
-		if v.degree > 0 {
-			v.contribution = float32(v.rank) / float32(v.degree)
-		}
-	}
-
-	if self.Iterations > 0 {
-		self.proceed = true
-	}
-
-	return self.proceed
-}
-
-func (self *PREngine) Init(phase uint32) error {
-	log.Println("phase: ", phase)
-	if phase == 0 {
-		var startRank float32 = float32(100) / float32(self.Base.TotVertices)
-		log.Println("num verts: ", self.Base.TotVertices)
-		log.Println("start Rank: ", startRank)
-
-		for i := range self.vertices {
-			v := &self.vertices[i]
-			v.degree = 0
-			v.rank = startRank
-			v.contribution = 0
-		}
-
-		self.ForEachEdge(InitVert, nil)
-
-		for i := range self.vertices {
-			v := &self.vertices[i]
-
-			if v.degree > 0 {
-				v.contribution = float32(v.rank) / float32(v.degree)
-			}
-
-			//fmt.Printf("cont %f , rank %f \n", v.contribution, v.rank)
-		}
-
-		self.proceed = true
+	if phase == self.Iterations {
+		self.Base.Proceed = false
+	} else {
+		self.Base.Proceed = true
 	}
 
 	return nil
 }
 
-func Float32frombytes(bytes []byte) float32 {
-	bits := binary.LittleEndian.Uint32(bytes)
-	float := math.Float32frombits(bits)
-	return float
+func (self *PREngine) Init(phase uint32) error {
+	var v *prVertexT
+
+	for i := range self.vertices {
+		v = &self.vertices[i]
+		if phase == 0 {
+			v.degree = 0
+			v.rank = 1.0
+		} else if phase == 1 {
+			v.rank = 1 - dampingFactor
+		}
+
+		v.contribution = 0
+	}
+
+	self.Base.Proceed = true
+
+	return nil
 }
 
-func Float32bytes(float float32) []byte {
-	bits := math.Float32bits(float)
-	bytes := make([]byte, 4)
-	binary.LittleEndian.PutUint32(bytes, bits)
-	return bytes
-}
-
-func Uint32bytes(value uint32) []byte {
-	bytes := make([]byte, 4)
-	binary.LittleEndian.PutUint32(bytes, value)
-	return bytes
+func (self *PREngine) Stop() bool {
+	return !self.Base.Proceed
 }

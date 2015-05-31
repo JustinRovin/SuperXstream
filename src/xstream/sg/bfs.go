@@ -27,12 +27,13 @@ type BFSEngine struct {
 	Base BaseEngine
 
 	vertices []bfsVertexT
-	proceed  bool
 }
 
 func (self *BFSEngine) AllocateVertices() error {
 	self.Base.vertexOffset = uint32(self.Base.Partition * self.Base.NumVertices)
 	self.vertices = make([]bfsVertexT, self.Base.NumVertices)
+
+	log.Println("numpartitions", self.Base.NumPartitions)
 
 	return nil
 }
@@ -48,9 +49,6 @@ func (self *BFSEngine) GetVertices() []byte {
 }
 
 func (self *BFSEngine) Scatter(phase uint32, buffers []bytes.Buffer) error {
-	if !self.proceed || (phase == 0 && self.Base.Partition > 0) {
-		return nil
-	}
 
 	filename := CreateFileName(self.Base.EdgeFile, self.Base.Partition)
 	inBlock := directio.AlignedBlock(directio.BlockSize * 3)
@@ -65,6 +63,7 @@ func (self *BFSEngine) Scatter(phase uint32, buffers []bytes.Buffer) error {
 	var src, dest, destPartition uint32
 	var vertex *bfsVertexT
 
+Loop:
 	for err != io.EOF && err != io.ErrUnexpectedEOF {
 		numBytes = 0
 		for i = 0; i < 3; i++ {
@@ -77,21 +76,24 @@ func (self *BFSEngine) Scatter(phase uint32, buffers []bytes.Buffer) error {
 			src = *(*uint32)(unsafe.Pointer(&inBlock[i]))
 			dest = *(*uint32)(unsafe.Pointer(&inBlock[i+4]))
 
-			if src > 0 || dest > 0 { // ignoring the padding bytes
-				vertex = &self.vertices[src-self.Base.vertexOffset]
-				if vertex.parent != math.MaxUint32 && vertex.phase == phase {
-					destPartition = dest / partition32
-					buffers[destPartition].Write(inBlock[i : i+8])
-				}
+			if src == math.MaxUint32 && dest == math.MaxUint32 {
+				break Loop
+			}
+
+			vertex = &self.vertices[src-self.Base.vertexOffset]
+			if vertex.parent != math.MaxUint32 && vertex.phase == phase {
+				destPartition = dest / partition32
+				buffers[destPartition].Write(inBlock[i : i+8])
 			}
 		}
 	}
 
+	log.Println("Scatter completed")
 	return nil
 }
 
 func (self *BFSEngine) Gather(phase uint32, queue *utils.ScFifo,
-	numPartitions int) bool {
+	numPartitions int) error {
 	doneMarkers := 0
 
 	var payload utils.Payload
@@ -100,15 +102,28 @@ func (self *BFSEngine) Gather(phase uint32, queue *utils.ScFifo,
 	var parent, child uint32
 	var vertex *bfsVertexT
 
-	self.proceed = false
+	if phase == 0 {
+		self.Base.Proceed = true
+		return nil
+	} else {
+		self.Base.Proceed = false
+	}
 
+	var b bool
 	for {
 		payload, _ = queue.Dequeue()
+		if payload.Size != 0 {
+			log.Println("Received payload size", payload.Size)
+		}
 		if payload.Size == -1 {
 			doneMarkers++
 			if doneMarkers == numPartitions {
 				break
 			}
+		}
+		if b == false {
+			// runtime.Gosched()
+			// log.Println("EMPTY with doneMarkers", doneMarkers)
 		}
 
 		for i = 0; i < payload.Size; i += payload.ObjectSize {
@@ -119,14 +134,15 @@ func (self *BFSEngine) Gather(phase uint32, queue *utils.ScFifo,
 			if vertex.parent == math.MaxUint32 {
 				vertex.parent = parent
 				vertex.phase = phase
-				if !self.proceed {
-					self.proceed = true
+				if !self.Base.Proceed {
+					self.Base.Proceed = true
 				}
 			}
 		}
 	}
+	log.Println("Gather completed")
 
-	return self.proceed
+	return nil
 }
 
 func (self *BFSEngine) Init(phase uint32) error {
@@ -139,8 +155,12 @@ func (self *BFSEngine) Init(phase uint32) error {
 			self.vertices[0].parent = 0
 		}
 
-		self.proceed = true
+		self.Base.Proceed = true
 	}
 
 	return nil
+}
+
+func (self *BFSEngine) Stop() bool {
+	return !self.Base.Proceed
 }

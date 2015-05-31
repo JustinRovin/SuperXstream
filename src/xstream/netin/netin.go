@@ -1,7 +1,6 @@
 package netin
 
 import (
-	"bytes"
 	"net/rpc"
 	"xstream/sg"
 	"xstream/utils"
@@ -18,7 +17,6 @@ type HostInfo struct {
 
 type Host struct {
 	Info          HostInfo
-	Buffers       []bytes.Buffer
 	Queue         *utils.ScFifo
 	Partition     int
 	PartitionList []HostInfo
@@ -39,17 +37,11 @@ func CreateHost(config *Config, myPort string) Host {
 		}
 	}
 
-	buffers := make([]bytes.Buffer, len(hostInfos))
-	for i, _ := range hostInfos {
-		buffers[i] = bytes.Buffer{}
-	}
-
 	conns := make([]*rpc.Client, len(hostInfos))
 	queue := utils.NewScFifo()
 
 	return Host{
 		Info:          myHostInfo,
-		Buffers:       buffers,
 		Queue:         queue,
 		Partition:     myPartitionIndex,
 		PartitionList: hostInfos,

@@ -69,6 +69,7 @@ func runGraph(host *netin.Host) {
 	if err != nil {
 		log.Fatal("PartitionGraph: ", err)
 	}
+	log.Println("partitionsize is", partitionSize)
 
 	netin.RunAlgorithm(host, os.Args[3], partitionSize)
 }

@@ -14,92 +14,95 @@ type GetVerticesResult struct {
 	Data []byte
 }
 
-func SendUpdatesToHosts(self *Host) error {
-	done := make(chan *rpc.Call, len(self.PartitionList))
-
-	var ack bool
-	for i, buffer := range self.Buffers {
-		if i == self.Partition {
-			go func(buffer []byte) {
-				self.SendUpdates(buffer, &ack)
-				done <- nil
-			}(buffer.Bytes())
-		} else {
-			self.Connections[i].Go("Host.SendUpdates", buffer.Bytes(), &ack,
-				done)
-		}
-	}
-
-	for i := 0; i < len(self.PartitionList); i++ {
-		<-done
-	}
-
-	for _, buffer := range self.Buffers {
-		buffer.Reset()
-	}
-
-	return nil
-}
-
-func (self *Host) SendUpdates(buffer []byte, ack *bool) error {
-	reader := bytes.NewReader(buffer)
-	length := reader.Len()
-
-	payload := utils.Payload{Size: 0, ObjectSize: 8}
-	bytesRead := 0
-	for i := 0; i < length; i += utils.MAX_PAYLOAD_SIZE {
-		bytesRead, _ = reader.Read(payload.Bytes[:])
-		payload.Size = bytesRead
-		self.Queue.Enqueue(payload)
-	}
-
-	payload.Size = -1
+func (self *Host) AppendUpdates(payload utils.Payload, ack *bool) error {
 	self.Queue.Enqueue(payload)
-
+	// log.Println("Appeded payload size", payload.Size)
 	return nil
 }
 
 func RunAlgorithm(self *Host, file string, partitionSize int) error {
-	base := &sg.BaseEngine{
-		EdgeFile:    file,
-		Partition:   0,
-		NumVertices: partitionSize,
-		TotVertices: len(self.PartitionList) * partitionSize,
-	}
-
 	startTime := time.Now()
 
-	var ack bool
+	acks := make([]bool, len(self.PartitionList))
 	for i, conn := range self.Connections {
-		base.Partition = i
+		a := &acks[i]
+		base := &sg.BaseEngine{
+			EdgeFile:      file,
+			Partition:     i,
+			NumVertices:   partitionSize,
+			NumPartitions: len(self.PartitionList),
+			TotVertices:   len(self.PartitionList) * partitionSize,
+		}
+
 		if i == self.Partition {
-			self.CreateEngine(base, &ack)
+			self.CreateEngine(base, a)
 		} else {
-			conn.Call("Host.CreateEngine", base, &ack)
+			conn.Call("Host.CreateEngine", base, a)
 		}
 	}
 
 	done := make(chan *rpc.Call, len(self.PartitionList))
 	phase := uint32(0)
-	for proceed := true; proceed == true; {
-		proceed = false
+	var ack bool
+
+Loop:
+	for {
+		for i, conn := range self.Connections {
+			if i == self.Partition {
+				go func() {
+					self.RunInit(phase, &ack)
+					done <- nil
+				}()
+			} else {
+				conn.Go("Host.RunInit", phase, &ack, done)
+			}
+		}
+		for i := 0; i < len(self.PartitionList); i++ {
+			<-done
+		}
 
 		for i, conn := range self.Connections {
 			if i == self.Partition {
 				go func() {
-					self.RunPhase(phase, &proceed)
+					self.RunGather(phase, &ack)
 					done <- nil
 				}()
 			} else {
-				conn.Go("Host.RunPhase", phase, &proceed, done)
+				conn.Go("Host.RunGather", phase, &ack, done)
 			}
 		}
+		for i := 0; i < len(self.PartitionList); i++ {
+			<-done
+		}
 
+		for i, conn := range self.Connections {
+			if i == self.Partition {
+				go func() {
+					self.RunScatter(phase, &ack)
+					done <- nil
+				}()
+			} else {
+				conn.Go("Host.RunScatter", phase, &ack, done)
+			}
+		}
 		for i := 0; i < len(self.PartitionList); i++ {
 			<-done
 		}
 
 		phase++
+
+		for i, conn := range self.Connections {
+			var vote bool
+			if i == self.Partition {
+				self.Stop(0, &vote)
+			} else {
+				conn.Call("Host.Stop", 0, &vote)
+			}
+
+			if vote {
+				break Loop
+			}
+		}
 	}
 
 	log.Println("Phases Run:", phase)
@@ -131,7 +134,8 @@ func (self *Host) CreateEngine(base *sg.BaseEngine, ack *bool) error {
 	case "bfs":
 		self.Info.Engine = &sg.BFSEngine{Base: *base}
 	case "pagerank":
-		self.Info.Engine = &sg.PREngine{Base: *base, Iterations: 1}
+		self.Info.Engine = &sg.PREngine{Base: *base, Iterations: 3}
+		//iteration number is desired# + 2. one for the backwards x-stream gather-scatter cycle and one for setting up the rank?
 	}
 
 	self.Info.Engine.AllocateVertices()
@@ -139,17 +143,59 @@ func (self *Host) CreateEngine(base *sg.BaseEngine, ack *bool) error {
 	return nil
 }
 
-func (self *Host) RunPhase(phase uint32, proceed *bool) error {
+func (self *Host) RunInit(phase uint32, ack *bool) error {
+	log.Println("starting phase", phase)
 	self.Info.Engine.Init(phase)
-	self.Info.Engine.Scatter(phase, self.Buffers)
-	go SendUpdatesToHosts(self)
-	*proceed = self.Info.Engine.Gather(phase+1, self.Queue,
+	return nil
+}
+
+func (self *Host) RunGather(phase uint32, ack *bool) error {
+	self.Info.Engine.Gather(phase, self.Queue,
 		len(self.PartitionList))
+	return nil
+}
+
+func (self *Host) RunScatter(phase uint32, ack *bool) error {
+	buffers := make([]bytes.Buffer, len(self.PartitionList))
+	for i := range buffers {
+		buffers[i] = bytes.Buffer{}
+	}
+	self.Info.Engine.Scatter(phase, buffers)
+
+	var ack2 bool
+	for i, b := range buffers {
+		length := b.Len()
+
+		payload := utils.Payload{Size: 0, ObjectSize: 8}
+		bytesRead := 0
+		for j := 0; j < length; j += utils.MAX_PAYLOAD_SIZE {
+			bytesRead, _ = b.Read(payload.Bytes[:])
+			payload.Size = bytesRead
+
+			if i == self.Partition {
+				self.AppendUpdates(payload, &ack2)
+			} else {
+				self.Connections[i].Call("Host.AppendUpdates", payload, &ack2)
+			}
+		}
+
+		payload.Size = -1
+		if i == self.Partition {
+			self.AppendUpdates(payload, &ack2)
+		} else {
+			self.Connections[i].Call("Host.AppendUpdates", payload, &ack2)
+		}
+	}
 
 	return nil
 }
 
 func (self *Host) GetVertices(_ int, vertices *GetVerticesResult) error {
 	*vertices = GetVerticesResult{Data: self.Info.Engine.GetVertices()}
+	return nil
+}
+
+func (self *Host) Stop(_ int, yes *bool) error {
+	*yes = self.Info.Engine.Stop()
 	return nil
 }

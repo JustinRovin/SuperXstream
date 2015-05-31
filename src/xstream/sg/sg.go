@@ -2,6 +2,7 @@ package sg
 
 import (
 	"bytes"
+	"encoding/binary"
 	"log"
 	"os"
 	"strconv"
@@ -14,15 +15,19 @@ type ScatterGatherEngine interface {
 	AllocateVertices() error
 	Init(phase uint32) error
 	Scatter(phase uint32, buffers []bytes.Buffer) error
-	Gather(phase uint32, queue *utils.ScFifo, numPartitions int) bool
+	Gather(phase uint32, queue *utils.ScFifo, numPartitions int) error
 	GetVertices() []byte
+	Stop() bool
 }
 
 type BaseEngine struct {
-	EdgeFile    string
-	Partition   int
-	NumVertices int
-	TotVertices int
+	EdgeFile      string
+	Partition     int
+	NumVertices   int
+	TotVertices   int
+	NumPartitions int
+
+	Proceed bool
 
 	vertexOffset uint32
 }
@@ -50,6 +55,9 @@ func InitEdges(queue *utils.ScFifo, edgeSize int, edgeFile string) error {
 	for {
 		payload, _ = queue.Dequeue()
 		if payload.Size == -1 {
+			binary.Write(writeBuffer, binary.LittleEndian, int32(-1))
+			binary.Write(writeBuffer, binary.LittleEndian, int32(-1))
+			blockEdgeCount++
 			break
 		}
 
