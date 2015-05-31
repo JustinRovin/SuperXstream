@@ -7,8 +7,6 @@ import (
 	"xstream/utils"
 )
 
-const PAYLOAD_CHANNEL_SIZE = 512
-
 type HostInfo struct {
 	Hostname string
 	Addr     string
@@ -21,7 +19,7 @@ type HostInfo struct {
 type Host struct {
 	Info          HostInfo
 	Buffers       []bytes.Buffer
-	Channel       chan utils.Payload
+	Queue         *utils.ScFifo
 	Partition     int
 	PartitionList []HostInfo
 	Connections   []*rpc.Client
@@ -47,12 +45,12 @@ func CreateHost(config *Config, myPort string) Host {
 	}
 
 	conns := make([]*rpc.Client, len(hostInfos))
-	channel := make(chan utils.Payload, PAYLOAD_CHANNEL_SIZE)
+	queue := utils.NewScFifo()
 
 	return Host{
 		Info:          myHostInfo,
 		Buffers:       buffers,
-		Channel:       channel,
+		Queue:         queue,
 		Partition:     myPartitionIndex,
 		PartitionList: hostInfos,
 		Connections:   conns,

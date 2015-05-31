@@ -5,5 +5,5 @@
   ],
   "Procs": 2,
   "Logging": "enable",
-  "Engine":"pagerank"
+  "Engine":"bfs"
 }

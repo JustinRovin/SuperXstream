@@ -113,7 +113,7 @@ func (self *PREngine) Scatter(phase uint32, buffers []bytes.Buffer) error {
 	return nil
 }
 
-func (self *PREngine) Gather(phase uint32, channel chan utils.Payload,
+func (self *PREngine) Gather(phase uint32, queue *utils.ScFifo,
 	numPartitions int) bool {
 	self.proceed = false
 	self.Iterations--
@@ -133,8 +133,8 @@ func (self *PREngine) Gather(phase uint32, channel chan utils.Payload,
 	doneMarkers := 0
 
 	for {
-		payload = <-channel
-		if payload.Size == 0 {
+		payload, _ = queue.Dequeue()
+		if payload.Size == -1 {
 			doneMarkers++
 			if doneMarkers == numPartitions {
 				break

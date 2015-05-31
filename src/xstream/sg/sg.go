@@ -14,7 +14,7 @@ type ScatterGatherEngine interface {
 	AllocateVertices() error
 	Init(phase uint32) error
 	Scatter(phase uint32, buffers []bytes.Buffer) error
-	Gather(phase uint32, channel chan utils.Payload, numPartitions int) bool
+	Gather(phase uint32, queue *utils.ScFifo, numPartitions int) bool
 	GetVertices() []byte
 }
 
@@ -27,7 +27,7 @@ type BaseEngine struct {
 	vertexOffset uint32
 }
 
-func InitEdges(channel chan utils.Payload, edgeSize int, edgeFile string) error {
+func InitEdges(queue *utils.ScFifo, edgeSize int, edgeFile string) error {
 	outBlock := directio.AlignedBlock(directio.BlockSize)
 	outFile, err := directio.OpenFile(edgeFile,
 		os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
@@ -48,8 +48,8 @@ func InitEdges(channel chan utils.Payload, edgeSize int, edgeFile string) error 
 	var i int
 
 	for {
-		payload = <-channel
-		if payload.Size == 0 {
+		payload, _ = queue.Dequeue()
+		if payload.Size == -1 {
 			break
 		}
 

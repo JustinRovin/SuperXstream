@@ -30,16 +30,14 @@ type StartInitEdgesArgs struct {
 }
 
 func (self *Host) StartInitEdges(args *StartInitEdgesArgs, ack *bool) error {
-	go sg.InitEdges(self.Channel, args.EdgeSize,
+	go sg.InitEdges(self.Queue, args.EdgeSize,
 		sg.CreateFileName(args.File, self.Partition))
 
-	*ack = true
 	return nil
 }
 
 func (self *Host) AppendEdges(payload *utils.Payload, ack *bool) error {
-	self.Channel <- *payload
-	*ack = true
+	self.Queue.Enqueue(*payload)
 	return nil
 }
 
@@ -143,11 +141,11 @@ func PartitionGraph(self *Host, file string, includeWeights bool) (int, error) {
 
 		if i == self.Partition {
 			self.AppendEdges(payload, &ack)
-			payload.Size = 0
+			payload.Size = -1
 			self.AppendEdges(payload, &ack)
 		} else {
 			err := c.Call("Host.AppendEdges", payload, &ack)
-			payload.Size = 0
+			payload.Size = -1
 			err = c.Call("Host.AppendEdges", payload, &ack)
 			if err != nil {
 				fmt.Println("error finishing init edges:", err)

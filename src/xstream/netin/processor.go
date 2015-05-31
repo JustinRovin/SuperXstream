@@ -50,11 +50,11 @@ func (self *Host) SendUpdates(buffer []byte, ack *bool) error {
 	for i := 0; i < length; i += utils.MAX_PAYLOAD_SIZE {
 		bytesRead, _ = reader.Read(payload.Bytes[:])
 		payload.Size = bytesRead
-		self.Channel <- payload
+		self.Queue.Enqueue(payload)
 	}
 
-	payload.Size = 0
-	self.Channel <- payload
+	payload.Size = -1
+	self.Queue.Enqueue(payload)
 
 	return nil
 }
@@ -136,7 +136,6 @@ func (self *Host) CreateEngine(base *sg.BaseEngine, ack *bool) error {
 
 	self.Info.Engine.AllocateVertices()
 
-	*ack = true
 	return nil
 }
 
@@ -144,7 +143,7 @@ func (self *Host) RunPhase(phase uint32, proceed *bool) error {
 	self.Info.Engine.Init(phase)
 	self.Info.Engine.Scatter(phase, self.Buffers)
 	go SendUpdatesToHosts(self)
-	*proceed = self.Info.Engine.Gather(phase+1, self.Channel,
+	*proceed = self.Info.Engine.Gather(phase+1, self.Queue,
 		len(self.PartitionList))
 
 	return nil
