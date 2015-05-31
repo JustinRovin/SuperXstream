@@ -29,7 +29,7 @@ type prUpdateT struct {
 
 type PREngine struct {
 	Base       BaseEngine
-	Iterations uint32
+	Iterations int
 
 	vertices []prVertexT
 }
@@ -117,7 +117,7 @@ func (self *PREngine) Gather(phase uint32, queue *utils.ScFifo,
 	//this part adds all of the incoming contributions to the
 	//destination(target) vertex
 
-	if phase == 0 || phase == 1 {
+	if phase == 0 {
 		self.Base.Proceed = true
 		return nil
 	}
@@ -131,9 +131,6 @@ func (self *PREngine) Gather(phase uint32, queue *utils.ScFifo,
 
 	for {
 		payload, _ = queue.Dequeue()
-		if payload.Size != 0 {
-			log.Println("Received payload size", payload.Size)
-		}
 		if payload.Size == -1 {
 			doneMarkers++
 			if doneMarkers == numPartitions {
@@ -151,7 +148,7 @@ func (self *PREngine) Gather(phase uint32, queue *utils.ScFifo,
 		}
 	}
 
-	if phase == self.Iterations {
+	if phase == uint32(self.Iterations) {
 		self.Base.Proceed = false
 	} else {
 		self.Base.Proceed = true
@@ -163,16 +160,19 @@ func (self *PREngine) Gather(phase uint32, queue *utils.ScFifo,
 func (self *PREngine) Init(phase uint32) error {
 	var v *prVertexT
 
-	for i := range self.vertices {
-		v = &self.vertices[i]
-		if phase == 0 {
-			v.degree = 0
-			v.rank = 1.0
-		} else if phase == 1 {
-			v.rank = 1 - dampingFactor
+	if phase == 0 {
+		for i := range self.vertices {
+			self.vertices[i] = prVertexT{degree: 0, rank: 1.0, contribution: 0}
 		}
+	} else {
+		for i := range self.vertices {
+			v = &self.vertices[i]
+			if phase == 1 {
+				v.rank = 1 - dampingFactor
+			}
 
-		v.contribution = 0
+			v.contribution = 0
+		}
 	}
 
 	self.Base.Proceed = true

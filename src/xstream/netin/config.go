@@ -10,10 +10,11 @@ import (
 )
 
 type Config struct {
-	Hosts   []string
-	Procs   int
-	Logging string
-	Engine  string
+	Hosts      []string
+	Procs      int
+	Logging    string
+	Engine     string
+	Iterations int
 }
 
 func LoadConfig(filename string) (config Config) {

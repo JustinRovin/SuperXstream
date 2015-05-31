@@ -1,6 +1,6 @@
 package utils
 
-const MAX_PAYLOAD_SIZE int = 524288
+const MAX_PAYLOAD_SIZE int = 1048576
 const growBy int = 64
 
 type Payload struct {

@@ -26,6 +26,7 @@ type BaseEngine struct {
 	NumVertices   int
 	TotVertices   int
 	NumPartitions int
+	Iterations    int
 
 	Proceed bool
 

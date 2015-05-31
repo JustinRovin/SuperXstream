@@ -88,7 +88,6 @@ Loop:
 		}
 	}
 
-	log.Println("Scatter completed")
 	return nil
 }
 
@@ -112,9 +111,6 @@ func (self *BFSEngine) Gather(phase uint32, queue *utils.ScFifo,
 	var b bool
 	for {
 		payload, _ = queue.Dequeue()
-		if payload.Size != 0 {
-			log.Println("Received payload size", payload.Size)
-		}
 		if payload.Size == -1 {
 			doneMarkers++
 			if doneMarkers == numPartitions {
@@ -140,7 +136,6 @@ func (self *BFSEngine) Gather(phase uint32, queue *utils.ScFifo,
 			}
 		}
 	}
-	log.Println("Gather completed")
 
 	return nil
 }

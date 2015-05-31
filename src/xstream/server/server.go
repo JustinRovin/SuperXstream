@@ -52,7 +52,7 @@ func main() {
 	host := netin.CreateHost(&config, os.Args[2])
 
 	if host.Partition == 0 {
-		go runGraph(&host)
+		go runGraph(&host, &config)
 		Start(&host)
 	} else {
 		log.Println(host.Info.Addr, "is waiting for instructions")
@@ -61,7 +61,7 @@ func main() {
 	}
 }
 
-func runGraph(host *netin.Host) {
+func runGraph(host *netin.Host, config *netin.Config) {
 	dialConnections(host)
 	log.Println(host.Info.Addr, "is Partition 0.")
 	log.Println(host.Info.Addr, "is processing graph", os.Args[3])
@@ -71,7 +71,8 @@ func runGraph(host *netin.Host) {
 	}
 	log.Println("partitionsize is", partitionSize)
 
-	netin.RunAlgorithm(host, os.Args[3], partitionSize)
+	netin.RunAlgorithm(host, os.Args[3], partitionSize, config.Iterations)
+	netin.GetVerticesFromHosts(host)
 }
 
 func dialConnections(host *netin.Host) {
