@@ -12,7 +12,7 @@ import blessings
 
 term = blessings.Terminal()
 
-BUILD_SERVER = 'ec2-52-8-74-150.us-west-1.compute.amazonaws.com'
+BUILD_SERVER = 'ec2-52-8-123-134.us-west-1.compute.amazonaws.com'
 
 def main():
     parser = argparse.ArgumentParser()
@@ -21,8 +21,6 @@ def main():
             help='Build source code and redistribute server binary.')
     parser.add_argument('-d', '--distrib', default=False, action='store_true',
             help='Distribute the current server binary without rebuilding.')
-    parser.add_argument('-c', '--clear', default=False, action='store_true',
-            help='Delete persistence engine files on each server.')
 
     parser.add_argument('-L', '--launch', default=False, action='store_true',
             help='Start each remote server.')
@@ -47,9 +45,6 @@ def main():
     if args.killall:
         killall(config)
 
-    if args.clear:
-        clearall(config)
-
     if args.build or args.distrib:
         distrib(config, args.config[0])
 
@@ -71,21 +66,15 @@ def build():
     sp.call(['scp', BUILD_SERVER+':~/bin/server', 'bin/xstream-server'])
 
 
-def clearall(config):
-    print term.yellow(
-            'clearing database and index on %s nodes' % len(config['Hosts']))
-    for hostname in config['Hosts']:
-        host, port = hostname.split(':')
-        sp.call(['ssh', host, 'rm', '-f', 'pe*.db{,-index}', '*.log'])
-
-
 def distrib(config, config_filename):
     print term.yellow('distributing server binary')
     for hostname in config['Hosts']:
         host, port = hostname.split(':')
         print term.yellow('to host'), host
-        sp.call(['scp', 'bin/xstream-server', config_filename,
-                '%s:~' % host])
+        sp.call(['ssh', "-t", host, "sudo", "mkdir", "-p", "/media/ephemeral0/xstream"])
+        sp.call(['ssh', "-t", host, "sudo", "chmod", "777", "/media/ephemeral0/xstream"])
+        sp.call(['scp', "bin/xstream-server", config_filename,
+                '%s:/media/ephemeral0/xstream/' % host])
 
 
 def killall(config):
@@ -103,7 +92,7 @@ def launchall(config, config_filename):
             host, port = hostname.split(':')
             print term.blue('launch'), host+':'+port
             sp.call(
-                ['ssh', '-f', host, "./xstream-server", config_filename, port, "testgraph", ">", "%s.log" % port, "2>&1"],
+                ['ssh', '-f', host, "/media/ephemeral0/xstream/xstream-server", "/media/ephemeral0/xstream/" + config_filename, port, "/media/ephemeral0/xstream/twittergraph", ">", "%s.log" % port, "2>&1"],
                 stdout=fnull, stderr=fnull)
 
 

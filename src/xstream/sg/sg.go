@@ -14,7 +14,7 @@ import (
 type ScatterGatherEngine interface {
 	AllocateVertices() error
 	Init(phase uint32) error
-	Scatter(phase uint32, buffers []bytes.Buffer) error
+	Scatter(phase uint32, buffers []bytes.Buffer, flusher func(bytes.Buffer, int)) error
 	Gather(phase uint32, queue *utils.ScFifo, numPartitions int) error
 	GetVertices() []byte
 	Stop() bool

@@ -48,7 +48,7 @@ func (self *BFSEngine) GetVertices() []byte {
 	return buffer.Bytes()
 }
 
-func (self *BFSEngine) Scatter(phase uint32, buffers []bytes.Buffer) error {
+func (self *BFSEngine) Scatter(phase uint32, buffers []bytes.Buffer, flusher func(bytes.Buffer, int)) error {
 
 	filename := CreateFileName(self.Base.EdgeFile, self.Base.Partition)
 	inBlock := directio.AlignedBlock(directio.BlockSize * 3)
@@ -64,7 +64,7 @@ func (self *BFSEngine) Scatter(phase uint32, buffers []bytes.Buffer) error {
 	var vertex *bfsVertexT
 
 Loop:
-	for err != io.EOF && err != io.ErrUnexpectedEOF {
+	for numBytes = 1; numBytes > 0; {
 		numBytes = 0
 		for i = 0; i < 3; i++ {
 			x, err = io.ReadFull(inFile,

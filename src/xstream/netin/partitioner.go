@@ -103,7 +103,7 @@ func PartitionGraph(self *Host, file string, includeWeights bool) (int, error) {
 	var payload *utils.Payload
 
 	var i, x int
-	for err != io.EOF && err != io.ErrUnexpectedEOF {
+	for numBytes = 1; numBytes > 0; {
 		numBytes = 0
 		for i = 0; i < 3; i++ {
 			x, err = io.ReadFull(inFile,
@@ -140,16 +140,17 @@ func PartitionGraph(self *Host, file string, includeWeights bool) (int, error) {
 		var ack bool
 
 		if i == self.Partition {
-			self.AppendEdges(payload, &ack)
+			if payload.Size > 0 {
+				self.AppendEdges(payload, &ack)
+			}
 			payload.Size = -1
 			self.AppendEdges(payload, &ack)
 		} else {
-			err := c.Call("Host.AppendEdges", payload, &ack)
-			payload.Size = -1
-			err = c.Call("Host.AppendEdges", payload, &ack)
-			if err != nil {
-				fmt.Println("error finishing init edges:", err)
+			if payload.Size > 0 {
+				c.Call("Host.AppendEdges", payload, &ack)
 			}
+			payload.Size = -1
+			c.Call("Host.AppendEdges", payload, &ack)
 		}
 	}
 

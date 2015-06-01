@@ -3,15 +3,16 @@ package sg
 import (
 	"bytes"
 	"encoding/binary"
-	"math"
-	//	"fmt"
 	"io"
 	"log"
+	"math"
 	"os"
-	"unsafe"
-	"xstream/utils"
 
 	"github.com/ncw/directio"
+	//	"fmt"
+
+	"unsafe"
+	"xstream/utils"
 )
 
 const dampingFactor float32 = 0.85
@@ -30,6 +31,8 @@ type prUpdateT struct {
 type PREngine struct {
 	Base       BaseEngine
 	Iterations int
+
+	// EdgeBlocks []byte
 
 	vertices []prVertexT
 }
@@ -51,7 +54,8 @@ func (self *PREngine) GetVertices() []byte {
 	return buffer.Bytes()
 }
 
-func (self *PREngine) Scatter(phase uint32, buffers []bytes.Buffer) error {
+func (self *PREngine) Scatter(phase uint32, buffers []bytes.Buffer, flusher func(bytes.Buffer, int)) error {
+
 	filename := CreateFileName(self.Base.EdgeFile, self.Base.Partition)
 	inBlock := directio.AlignedBlock(directio.BlockSize * 3)
 	inFile, err := directio.OpenFile(filename, os.O_RDONLY, 0666)
@@ -64,9 +68,12 @@ func (self *PREngine) Scatter(phase uint32, buffers []bytes.Buffer) error {
 	var i, x, numBytes int
 	var src, dest, tmp uint32
 
+	var updateCount int = 0
+
 	var b [4]byte
 
-	for err != io.EOF && err != io.ErrUnexpectedEOF {
+Loop:
+	for numBytes = 1; numBytes > 0; {
 		numBytes = 0
 		for i = 0; i < 3; i++ {
 			x, err = io.ReadFull(inFile,
@@ -79,7 +86,7 @@ func (self *PREngine) Scatter(phase uint32, buffers []bytes.Buffer) error {
 			dest = *(*uint32)(unsafe.Pointer(&inBlock[i+4]))
 
 			if src == math.MaxUint32 && dest == math.MaxUint32 {
-				return nil
+				break Loop
 			}
 
 			v = &self.vertices[src-self.Base.vertexOffset]
@@ -105,9 +112,18 @@ func (self *PREngine) Scatter(phase uint32, buffers []bytes.Buffer) error {
 				b[2] = byte(tmp >> 16)
 				b[3] = byte(tmp >> 24)
 				buffers[destPartition].Write(b[:])
+
+				updateCount++
+
+				if buffers[destPartition].Len() >= 67108864 {
+					flusher(buffers[destPartition], int(destPartition))
+					buffers[destPartition] = bytes.Buffer{}
+				}
 			}
 		}
 	}
+
+	log.Println(updateCount, " updates generated")
 
 	return nil
 }
@@ -129,6 +145,8 @@ func (self *PREngine) Gather(phase uint32, queue *utils.ScFifo,
 	var i int
 	doneMarkers := 0
 
+	var updateCount int = 0
+
 	for {
 		payload, _ = queue.Dequeue()
 		if payload.Size == -1 {
@@ -145,6 +163,8 @@ func (self *PREngine) Gather(phase uint32, queue *utils.ScFifo,
 			vertex = &self.vertices[target-self.Base.vertexOffset]
 			vertex.contribution += rank
 			vertex.rank = 1 - dampingFactor + dampingFactor*vertex.contribution
+
+			updateCount++
 		}
 	}
 
@@ -153,6 +173,8 @@ func (self *PREngine) Gather(phase uint32, queue *utils.ScFifo,
 	} else {
 		self.Base.Proceed = true
 	}
+
+	log.Println(updateCount, " updates processed")
 
 	return nil
 }
@@ -174,6 +196,40 @@ func (self *PREngine) Init(phase uint32) error {
 			v.contribution = 0
 		}
 	}
+
+	// if phase == 0 {
+	// 	filename := CreateFileName(self.Base.EdgeFile, self.Base.Partition)
+	// 	inBlock := directio.AlignedBlock(directio.BlockSize * 3)
+	// 	inFile, err := directio.OpenFile(filename, os.O_RDONLY, 0666)
+	// 	if err != nil {
+	// 		log.Fatal(err)
+	// 	}
+	// 	defer inFile.Close()
+
+	// 	fi, _ := inFile.Stat()
+
+	// 	self.EdgeBlocks = make([]byte, 0, fi.Size())
+	// 	log.Println(int(fi.Size()/(directio.BlockSize*3))+1, "blocks")
+
+	// 	var numBytes, i, x int
+	// 	for {
+	// 		numBytes = 0
+	// 		for i = 0; i < 3; i++ {
+	// 			x, err = io.ReadFull(inFile,
+	// 				inBlock[i*directio.BlockSize:(i+1)*directio.BlockSize])
+	// 			numBytes += x
+	// 		}
+
+	// 		if numBytes == 0 {
+	// 			break
+	// 		}
+
+	// 		self.EdgeBlocks = append(self.EdgeBlocks, inBlock...)
+	// 		// self.EdgeBlocks[j] = make([]byte, directio.BlockSize*3)
+	// 		// copy(self.EdgeBlocks[j], inBlock)
+	// 		// j++
+	// 	}
+	// }
 
 	self.Base.Proceed = true
 

@@ -13,7 +13,6 @@ colors = [
     term.blue,
     term.green,
     term.yellow,
-    term.purple,
     term.red,
 ]
 

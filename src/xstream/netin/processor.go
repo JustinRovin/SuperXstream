@@ -109,13 +109,31 @@ func (self *Host) RunPhase(phase uint32, ack *bool) error {
 	for i := range buffers {
 		buffers[i] = bytes.Buffer{}
 	}
-	self.Info.Engine.Scatter(phase, buffers)
+
+	payload := utils.Payload{Size: 0, ObjectSize: 8}
+
+	self.Info.Engine.Scatter(phase, buffers, func(b bytes.Buffer, p int) {
+		var ack2 bool
+		length := b.Len()
+
+		bytesRead := 0
+		for j := 0; j < length; j += utils.MAX_PAYLOAD_SIZE {
+			bytesRead, _ = b.Read(payload.Bytes[:])
+			payload.Size = bytesRead
+
+			if p == self.Partition {
+				self.AppendUpdates(payload, &ack2)
+
+			} else {
+				self.Connections[p].Call("Host.AppendUpdates", payload, &ack2)
+			}
+		}
+	})
 
 	var ack2 bool
 	for i, b := range buffers {
 		length := b.Len()
 
-		payload := utils.Payload{Size: 0, ObjectSize: 8}
 		bytesRead := 0
 		for j := 0; j < length; j += utils.MAX_PAYLOAD_SIZE {
 			bytesRead, _ = b.Read(payload.Bytes[:])
